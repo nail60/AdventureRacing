@@ -1,0 +1,29 @@
+{
+  "name": "@adventure-racing/client",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@adventure-racing/shared": "*",
+    "axios": "^1.7.2",
+    "cesium": "^1.119.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^6.24.0",
+    "resium": "^1.17.3",
+    "vite-plugin-static-copy": "^3.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.4.5",
+    "vite": "^5.3.3",
+    "vite-plugin-cesium": "^1.2.23"
+  }
+}

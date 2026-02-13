@@ -1,0 +1,201 @@
+import { useState, useRef, useMemo, useCallback, Component, type ReactNode, type ErrorInfo } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { JulianDate } from 'cesium';
+import type { Viewer as CesiumViewerType } from 'cesium';
+import type { CesiumComponentRef } from 'resium';
+import { useSceneDetail } from '../hooks/useSceneDetail';
+import { usePlayback } from '../hooks/usePlayback';
+import { CesiumViewer } from '../components/viewer/CesiumViewer';
+import { PlaybackControls } from '../components/playback/PlaybackControls';
+import { TimeSlider } from '../components/playback/TimeSlider';
+import { JumpButtons } from '../components/playback/JumpButtons';
+import { TrackSidebar } from '../components/sidebar/TrackSidebar';
+
+// Error boundary to catch Cesium/Resium crashes and show them on screen
+class ViewerErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('CesiumViewer crashed:', error, info.componentStack);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 20, color: '#f44', background: '#1a0000', height: '100%', overflow: 'auto' }}>
+          <h2>Viewer Error</h2>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 13 }}>{this.state.error.message}</pre>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 11, color: '#888', marginTop: 10 }}>{this.state.error.stack}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export function SceneViewerPage() {
+  const { id } = useParams<{ id: string }>();
+  const { scene, tracks, loading, error } = useSceneDetail(id!);
+
+  const viewerRef = useRef<CesiumComponentRef<CesiumViewerType>>(null);
+
+  const trackIds = useMemo(() => {
+    if (!scene) return [];
+    return scene.tracks.map(t => t.tracklogId);
+  }, [scene]);
+
+  // null = no user overrides yet, treat all tracks as visible
+  const [visibilityOverride, setVisibilityOverride] = useState<Set<string> | null>(null);
+  const visibleTrackIds = visibilityOverride ?? new Set(trackIds);
+
+  const toggleTrack = useCallback((id: string) => {
+    setVisibilityOverride(prev => {
+      const base = prev ?? new Set(trackIds);
+      const next = new Set(base);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, [trackIds]);
+
+  const showAll = useCallback(() => setVisibilityOverride(new Set(trackIds)), [trackIds]);
+  const hideAll = useCallback(() => setVisibilityOverride(new Set()), []);
+
+  // Compute time bounds from all tracks
+  const { startTime, stopTime } = useMemo(() => {
+    if (tracks.size === 0) return { startTime: null, stopTime: null };
+
+    let minTime = Infinity;
+    let maxTime = -Infinity;
+    for (const track of tracks.values()) {
+      if (track.timestamps.length === 0) continue;
+      minTime = Math.min(minTime, track.timestamps[0]);
+      maxTime = Math.max(maxTime, track.timestamps[track.timestamps.length - 1]);
+    }
+
+    if (minTime === Infinity) return { startTime: null, stopTime: null };
+
+    return {
+      startTime: JulianDate.fromDate(new Date(minTime)),
+      stopTime: JulianDate.fromDate(new Date(maxTime)),
+    };
+  }, [tracks]);
+
+  const playback = usePlayback(viewerRef, startTime, stopTime);
+
+  // Debug info
+  console.log('[SceneViewer] loading:', loading, 'error:', error, 'tracks:', tracks.size, 'trackIds:', trackIds.length, 'visible:', visibleTrackIds.size);
+
+  if (loading) {
+    return (
+      <div style={{
+        height: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'column',
+        gap: 16,
+        background: '#0a0a0a',
+      }}>
+        <div style={{ fontSize: 18, color: '#aaa' }}>
+          {scene?.status === 'processing' ? 'Processing tracks...' : 'Loading scene...'}
+        </div>
+        {scene && (
+          <div style={{ fontSize: 14, color: '#666' }}>
+            {scene.trackCount} track{scene.trackCount !== 1 ? 's' : ''}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{
+        height: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'column',
+        gap: 16,
+        background: '#0a0a0a',
+      }}>
+        <div style={{ fontSize: 18, color: '#f44' }}>{error}</div>
+        <Link to="/" style={{ color: '#4fc3f7' }}>Back to Home</Link>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+      <ViewerErrorBoundary>
+        <CesiumViewer
+          ref={viewerRef}
+          tracks={tracks}
+          trackIds={trackIds}
+          visibleTrackIds={visibleTrackIds}
+        />
+      </ViewerErrorBoundary>
+
+      {/* Playback bar overlay */}
+      <div style={{
+        position: 'absolute',
+        bottom: 10,
+        left: 10,
+        right: 260,
+        background: 'rgba(20,20,20,0.92)',
+        borderRadius: 8,
+        padding: 10,
+        zIndex: 10,
+        border: '1px solid #333',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <PlaybackControls
+            playing={playback.playing}
+            togglePlay={playback.togglePlay}
+            speedIndex={playback.speedIndex}
+            speedOptions={playback.speedOptions}
+            speedUp={playback.speedUp}
+            speedDown={playback.speedDown}
+          />
+          <TimeSlider
+            sliderRef={playback.sliderRef}
+            timeDisplayRef={playback.timeDisplayRef}
+            onSeek={playback.seekTo}
+          />
+        </div>
+        <JumpButtons onJump={playback.jump} />
+      </div>
+
+      {/* Back button */}
+      <Link to="/" style={{
+        position: 'absolute',
+        top: 10,
+        left: 10,
+        background: 'rgba(20,20,20,0.9)',
+        color: '#4fc3f7',
+        padding: '6px 14px',
+        borderRadius: 6,
+        fontSize: 13,
+        zIndex: 10,
+        border: '1px solid #333',
+      }}>
+        Back
+      </Link>
+
+      {/* Track sidebar */}
+      {scene && (
+        <TrackSidebar
+          scene={scene}
+          trackIds={trackIds}
+          visibleTrackIds={visibleTrackIds}
+          onToggleTrack={toggleTrack}
+          onShowAll={showAll}
+          onHideAll={hideAll}
+        />
+      )}
+    </div>
+  );
+}
