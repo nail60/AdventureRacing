@@ -1,4 +1,4 @@
-import { useRef, useMemo, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import { Viewer } from 'resium';
 import {
   Viewer as CesiumViewerType,
@@ -6,6 +6,9 @@ import {
   Math as CesiumMath,
   Ion,
   Terrain,
+  JulianDate,
+  ClockRange,
+  ClockStep,
 } from 'cesium';
 import type { CesiumComponentRef } from 'resium';
 import type { TrackData } from '@adventure-racing/shared';
@@ -22,16 +25,15 @@ if (ionToken) {
 const worldTerrain = ionToken ? Terrain.fromWorldTerrain() : undefined;
 
 interface Props {
+  viewerRef: React.RefObject<CesiumComponentRef<CesiumViewerType> | null>;
   tracks: Map<string, TrackData>;
   trackIds: string[];
   visibleTrackIds: Set<string>;
+  startTime: JulianDate | null;
+  stopTime: JulianDate | null;
 }
 
-export const CesiumViewer = forwardRef<CesiumComponentRef<CesiumViewerType>, Props>(
-  ({ tracks, trackIds, visibleTrackIds }, ref) => {
-    const viewerRef = useRef<CesiumComponentRef<CesiumViewerType>>(null);
-
-    useImperativeHandle(ref, () => viewerRef.current!);
+export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, startTime, stopTime }: Props) {
 
     // Fly to starting area on load — retry until viewer ref is ready
     const cameraInitialized = useRef(false);
@@ -67,10 +69,22 @@ export const CesiumViewer = forwardRef<CesiumComponentRef<CesiumViewerType>, Pro
           },
           duration: 0,
         });
+
+        // Set clock to track time range so entities have valid positions
+        if (startTime && stopTime) {
+          viewer.clock.startTime = startTime;
+          viewer.clock.stopTime = stopTime;
+          viewer.clock.currentTime = JulianDate.clone(startTime);
+          viewer.clock.clockRange = ClockRange.LOOP_STOP;
+          viewer.clock.clockStep = ClockStep.SYSTEM_CLOCK_MULTIPLIER;
+          viewer.clock.multiplier = 4;
+          viewer.clock.shouldAnimate = false;
+        }
+
         cameraInitialized.current = true;
       }
       tryFly();
-    }, [tracks, trackIds]);
+    }, [tracks, trackIds, startTime, stopTime]);
 
     // Memoize track entities to avoid re-creating on every render
     const trackEntities = useMemo(() => {
@@ -109,5 +123,4 @@ export const CesiumViewer = forwardRef<CesiumComponentRef<CesiumViewerType>, Pro
         ))}
       </Viewer>
     );
-  }
-);
+}
