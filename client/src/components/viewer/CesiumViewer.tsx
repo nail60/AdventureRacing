@@ -14,6 +14,12 @@ import {
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
   ConstantProperty,
+  CallbackProperty,
+  Color,
+  HeightReference,
+  VerticalOrigin,
+  HorizontalOrigin,
+  LabelStyle,
   defined,
 } from 'cesium';
 import type { Entity as CesiumEntity } from 'cesium';
@@ -158,6 +164,14 @@ export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, sta
       trackLookupRef.current = lookup;
     }, [tracks]);
 
+    // Measurement tool state
+    const measureStateRef = useRef<'IDLE' | 'FIRST_PLACED' | 'MEASURED'>('IDLE');
+    const measurePoint1Ref = useRef<Cartesian3 | null>(null);
+    const measurePoint2Ref = useRef<Cartesian3 | null>(null);
+    const measureMouseRef = useRef<Cartesian3 | null>(null);
+    const measureEntitiesRef = useRef<CesiumEntity[]>([]);
+    const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null);
+
     // Hover/tap tooltip + track highlight — direct DOM manipulation, no React re-renders
     const tooltipRef = useRef<HTMLDivElement>(null);
     const hoveredEntityRef = useRef<CesiumEntity | null>(null);
@@ -167,6 +181,184 @@ export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, sta
       let rafId: number | undefined;
       const normalWidth = new ConstantProperty(2);
       const highlightWidth = new ConstantProperty(4);
+
+      // --- Measurement helpers ---
+
+      function clearMeasurement(viewer: CesiumViewerType) {
+        for (const entity of measureEntitiesRef.current) {
+          viewer.entities.remove(entity);
+        }
+        measureEntitiesRef.current = [];
+        measurePoint1Ref.current = null;
+        measurePoint2Ref.current = null;
+        measureMouseRef.current = null;
+      }
+
+      function formatDistance(meters: number): string {
+        return meters >= 1000
+          ? `${(meters / 1000).toFixed(2)} km`
+          : `${Math.round(meters)} m`;
+      }
+
+      function getTerrainAltitude(viewer: CesiumViewerType, cartesian: Cartesian3): { msl: number } {
+        const carto = Cartographic.fromCartesian(cartesian);
+        const terrainHeight = viewer.scene.globe.getHeight(carto);
+        const msl = terrainHeight != null ? Math.round(terrainHeight) : Math.round(carto.height);
+        return { msl };
+      }
+
+      function altitudeLabel(alt: { msl: number }): string {
+        return `${alt.msl}m`;
+      }
+
+      function placeFirstPoint(viewer: CesiumViewerType, position: Cartesian3) {
+        measurePoint1Ref.current = position;
+        measureMouseRef.current = position;
+
+        const alt = getTerrainAltitude(viewer, position);
+
+        // Point marker
+        measureEntitiesRef.current.push(viewer.entities.add({
+          position,
+          point: {
+            pixelSize: 10,
+            color: Color.YELLOW,
+            outlineColor: Color.BLACK,
+            outlineWidth: 1,
+            heightReference: HeightReference.NONE,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+          label: {
+            text: altitudeLabel(alt),
+            font: '13px sans-serif',
+            fillColor: Color.YELLOW,
+            style: LabelStyle.FILL_AND_OUTLINE,
+            outlineColor: Color.BLACK,
+            outlineWidth: 3,
+            verticalOrigin: VerticalOrigin.BOTTOM,
+            horizontalOrigin: HorizontalOrigin.CENTER,
+            pixelOffset: new Cartesian2(0, -10),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+        }));
+
+        // Rubber-band polyline
+        measureEntitiesRef.current.push(viewer.entities.add({
+          polyline: {
+            positions: new CallbackProperty(() => {
+              const p1 = measurePoint1Ref.current;
+              const p2 = measureMouseRef.current;
+              return p1 && p2 ? [p1, p2] : [];
+            }, false) as any,
+            width: 2,
+            material: Color.YELLOW.withAlpha(0.7),
+            clampToGround: false,
+          },
+        }));
+
+        // Live distance label at midpoint
+        measureEntitiesRef.current.push(viewer.entities.add({
+          position: new CallbackProperty(() => {
+            const p1 = measurePoint1Ref.current;
+            const p2 = measureMouseRef.current;
+            if (!p1 || !p2) return p1 || Cartesian3.ZERO;
+            return Cartesian3.midpoint(p1, p2, new Cartesian3());
+          }, false) as any,
+          label: {
+            text: new CallbackProperty(() => {
+              const p1 = measurePoint1Ref.current;
+              const p2 = measureMouseRef.current;
+              if (!p1 || !p2) return '';
+              return formatDistance(Cartesian3.distance(p1, p2));
+            }, false) as any,
+            font: 'bold 15px sans-serif',
+            fillColor: Color.WHITE,
+            style: LabelStyle.FILL_AND_OUTLINE,
+            outlineColor: Color.BLACK,
+            outlineWidth: 4,
+            verticalOrigin: VerticalOrigin.BOTTOM,
+            horizontalOrigin: HorizontalOrigin.CENTER,
+            pixelOffset: new Cartesian2(0, -8),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+        }));
+      }
+
+      function finalizeMeasurement(viewer: CesiumViewerType, position: Cartesian3) {
+        measurePoint2Ref.current = position;
+
+        const p1 = measurePoint1Ref.current!;
+        const alt1 = getTerrainAltitude(viewer, p1);
+        const alt2 = getTerrainAltitude(viewer, position);
+        const dist = Cartesian3.distance(p1, position);
+        const midpoint = Cartesian3.midpoint(p1, position, new Cartesian3());
+
+        // Remove rubber-band entities (polyline + live label), keep point 1 marker
+        const rubberBandEntities = measureEntitiesRef.current.splice(1, 2);
+        for (const entity of rubberBandEntities) {
+          viewer.entities.remove(entity);
+        }
+
+        // Update point 1 label to refreshed altitude (in case terrain loaded more)
+        const p1Entity = measureEntitiesRef.current[0];
+        if (p1Entity?.label) {
+          p1Entity.label.text = new ConstantProperty(altitudeLabel(alt1));
+        }
+
+        // Static polyline
+        measureEntitiesRef.current.push(viewer.entities.add({
+          polyline: {
+            positions: [p1, position],
+            width: 3,
+            material: Color.YELLOW,
+            clampToGround: false,
+          },
+        }));
+
+        // Second point marker with altitude label
+        measureEntitiesRef.current.push(viewer.entities.add({
+          position,
+          point: {
+            pixelSize: 10,
+            color: Color.YELLOW,
+            outlineColor: Color.BLACK,
+            outlineWidth: 1,
+            heightReference: HeightReference.NONE,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+          label: {
+            text: altitudeLabel(alt2),
+            font: '13px sans-serif',
+            fillColor: Color.YELLOW,
+            style: LabelStyle.FILL_AND_OUTLINE,
+            outlineColor: Color.BLACK,
+            outlineWidth: 3,
+            verticalOrigin: VerticalOrigin.BOTTOM,
+            horizontalOrigin: HorizontalOrigin.CENTER,
+            pixelOffset: new Cartesian2(0, -10),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+        }));
+
+        // Distance label at midpoint
+        measureEntitiesRef.current.push(viewer.entities.add({
+          position: midpoint,
+          label: {
+            text: formatDistance(dist),
+            font: 'bold 15px sans-serif',
+            fillColor: Color.WHITE,
+            style: LabelStyle.FILL_AND_OUTLINE,
+            outlineColor: Color.BLACK,
+            outlineWidth: 4,
+            verticalOrigin: VerticalOrigin.BOTTOM,
+            horizontalOrigin: HorizontalOrigin.CENTER,
+            pixelOffset: new Cartesian2(0, -8),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+        }));
+      }
+
+      // --- Tooltip helpers (unchanged) ---
 
       function showTooltip(position: { x: number; y: number }, entity: CesiumEntity, viewer: CesiumViewerType) {
         const tooltip = tooltipRef.current;
@@ -262,6 +454,16 @@ export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, sta
         }
       }
 
+      // --- Escape key handler ---
+      function onKeyDown(e: KeyboardEvent) {
+        if (e.key === 'Escape' && measureStateRef.current === 'FIRST_PLACED') {
+          const viewer = viewerRef.current?.cesiumElement;
+          if (viewer) clearMeasurement(viewer);
+          measureStateRef.current = 'IDLE';
+        }
+      }
+      document.addEventListener('keydown', onKeyDown);
+
       function trySetup() {
         const viewer = viewerRef.current?.cesiumElement;
         if (!viewer) {
@@ -270,21 +472,62 @@ export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, sta
         }
         handler = new ScreenSpaceEventHandler(viewer.scene.canvas);
 
-        // Desktop: hover
+        // Desktop: hover + rubber-band update
         handler.setInputAction((movement: { endPosition: { x: number; y: number } }) => {
           handlePick(movement.endPosition, viewer);
+
+          // Update rubber-band cursor position
+          if (measureStateRef.current === 'FIRST_PLACED') {
+            const pos = viewer.scene.pickPosition(new Cartesian2(movement.endPosition.x, movement.endPosition.y));
+            if (pos) {
+              measureMouseRef.current = pos;
+            }
+          }
         }, ScreenSpaceEventType.MOUSE_MOVE);
 
-        // Mobile: tap
+        // Drag-safe click detection: record mouse-down position
         handler.setInputAction((click: { position: { x: number; y: number } }) => {
-          handlePick(click.position, viewer);
-        }, ScreenSpaceEventType.LEFT_CLICK);
+          mouseDownPosRef.current = { x: click.position.x, y: click.position.y };
+        }, ScreenSpaceEventType.LEFT_DOWN);
+
+        // On mouse-up: if moved < 5px, treat as click → measurement state machine
+        handler.setInputAction((click: { position: { x: number; y: number } }) => {
+          const down = mouseDownPosRef.current;
+          mouseDownPosRef.current = null;
+          if (!down) return;
+
+          const dx = click.position.x - down.x;
+          const dy = click.position.y - down.y;
+          if (dx * dx + dy * dy > 25) return; // dragged — not a click
+
+          const pos = viewer.scene.pickPosition(new Cartesian2(click.position.x, click.position.y));
+
+          if (measureStateRef.current === 'FIRST_PLACED') {
+            if (!pos) {
+              // Clicked sky/void — cancel
+              clearMeasurement(viewer);
+              measureStateRef.current = 'IDLE';
+              return;
+            }
+            finalizeMeasurement(viewer, pos);
+            measureStateRef.current = 'MEASURED';
+          } else {
+            // IDLE or MEASURED — clear and start new
+            if (!pos) return; // clicked sky with no active measurement — ignore
+            clearMeasurement(viewer);
+            placeFirstPoint(viewer, pos);
+            measureStateRef.current = 'FIRST_PLACED';
+          }
+        }, ScreenSpaceEventType.LEFT_UP);
       }
       trySetup();
 
       return () => {
         if (rafId !== undefined) cancelAnimationFrame(rafId);
         highlightEntity(null);
+        document.removeEventListener('keydown', onKeyDown);
+        const viewer = viewerRef.current?.cesiumElement;
+        if (viewer) clearMeasurement(viewer);
         handler?.destroy();
       };
     }, [viewerRef]);
