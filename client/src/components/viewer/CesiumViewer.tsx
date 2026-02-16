@@ -11,8 +11,10 @@ import {
   ClockStep,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
+  ConstantProperty,
   defined,
 } from 'cesium';
+import type { Entity as CesiumEntity } from 'cesium';
 import type { CesiumComponentRef } from 'resium';
 import type { TrackData } from '@adventure-racing/shared';
 import { TrackEntity } from './TrackEntity';
@@ -99,20 +101,52 @@ export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, sta
       }).filter(Boolean) as { id: string; track: TrackData; color: [number, number, number, number] }[];
     }, [tracks, trackIds]);
 
-    // Build pilotName → CSS color lookup for hover tooltip
-    const colorLookup = useMemo(() => {
-      const map = new Map<string, string>();
-      for (const { track, color } of trackEntities) {
-        const [r, g, b] = color;
-        map.set(track.pilotName, `rgb(${r},${g},${b})`);
-      }
-      return map;
-    }, [trackEntities]);
-
-    // Hover tooltip — direct DOM manipulation, no React re-renders
+    // Hover/tap tooltip + track highlight — direct DOM manipulation, no React re-renders
     const tooltipRef = useRef<HTMLDivElement>(null);
+    const hoveredEntityRef = useRef<CesiumEntity | null>(null);
+
     useEffect(() => {
       let handler: ScreenSpaceEventHandler | null = null;
+
+      function showTooltip(position: { x: number; y: number }, entity: CesiumEntity) {
+        const tooltip = tooltipRef.current;
+        if (!tooltip) return;
+        const name = entity.name || '';
+        tooltip.textContent = name;
+        tooltip.style.display = 'block';
+        tooltip.style.left = `${position.x + 15}px`;
+        tooltip.style.top = `${position.y - 10}px`;
+      }
+
+      function hideTooltip() {
+        const tooltip = tooltipRef.current;
+        if (tooltip) tooltip.style.display = 'none';
+      }
+
+      function highlightEntity(entity: CesiumEntity | null) {
+        // Restore previous
+        const prev = hoveredEntityRef.current;
+        if (prev && prev.path) {
+          prev.path.width = new ConstantProperty(2);
+        }
+        // Highlight new
+        hoveredEntityRef.current = entity;
+        if (entity && entity.path) {
+          entity.path.width = new ConstantProperty(4);
+        }
+      }
+
+      function handlePick(position: { x: number; y: number }, viewer: CesiumViewerType) {
+        const picked = viewer.scene.pick(position);
+        if (defined(picked) && picked.id?.name) {
+          const entity = picked.id as CesiumEntity;
+          showTooltip(position, entity);
+          highlightEntity(entity);
+        } else {
+          hideTooltip();
+          highlightEntity(null);
+        }
+      }
 
       function trySetup() {
         const viewer = viewerRef.current?.cesiumElement;
@@ -121,28 +155,24 @@ export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, sta
           return;
         }
         handler = new ScreenSpaceEventHandler(viewer.scene.canvas);
-        handler.setInputAction((movement: { endPosition: { x: number; y: number } }) => {
-          const tooltip = tooltipRef.current;
-          if (!tooltip) return;
 
-          const picked = viewer.scene.pick(movement.endPosition);
-          if (defined(picked) && picked.id?.name) {
-            const name = picked.id.name as string;
-            const color = colorLookup.get(name) || '#fff';
-            tooltip.textContent = name;
-            tooltip.style.display = 'block';
-            tooltip.style.left = `${movement.endPosition.x + 15}px`;
-            tooltip.style.top = `${movement.endPosition.y - 10}px`;
-            tooltip.style.color = color;
-          } else {
-            tooltip.style.display = 'none';
-          }
+        // Desktop: hover
+        handler.setInputAction((movement: { endPosition: { x: number; y: number } }) => {
+          handlePick(movement.endPosition, viewer);
         }, ScreenSpaceEventType.MOUSE_MOVE);
+
+        // Mobile: tap
+        handler.setInputAction((click: { position: { x: number; y: number } }) => {
+          handlePick(click.position, viewer);
+        }, ScreenSpaceEventType.LEFT_CLICK);
       }
       trySetup();
 
-      return () => handler?.destroy();
-    }, [viewerRef, colorLookup]);
+      return () => {
+        highlightEntity(null);
+        handler?.destroy();
+      };
+    }, [viewerRef]);
 
     return (<>
       <div ref={tooltipRef} style={tooltipStyle} />
@@ -179,9 +209,12 @@ const tooltipStyle: React.CSSProperties = {
   display: 'none',
   pointerEvents: 'none',
   zIndex: 20,
-  fontWeight: 'bold',
-  fontSize: 12,
-  fontFamily: 'system-ui',
-  textShadow: '0 0 3px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.5)',
+  fontSize: 14,
+  fontWeight: 600,
+  color: '#fff',
+  background: 'rgba(20,20,20,0.92)',
+  border: '1px solid #333',
+  borderRadius: 6,
+  padding: '4px 10px',
   whiteSpace: 'nowrap',
 };
