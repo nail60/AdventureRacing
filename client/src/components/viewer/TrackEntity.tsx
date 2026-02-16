@@ -43,6 +43,7 @@ export const TrackEntity = memo(function TrackEntity({ track, color, visible }: 
 
   return (
     <Entity
+      name={track.pilotName}
       show={visible}
       position={positionProperty}
       point={{

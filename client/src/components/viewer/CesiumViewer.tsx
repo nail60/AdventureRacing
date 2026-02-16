@@ -9,6 +9,9 @@ import {
   JulianDate,
   ClockRange,
   ClockStep,
+  ScreenSpaceEventHandler,
+  ScreenSpaceEventType,
+  defined,
 } from 'cesium';
 import type { CesiumComponentRef } from 'resium';
 import type { TrackData } from '@adventure-racing/shared';
@@ -96,7 +99,66 @@ export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, sta
       }).filter(Boolean) as { id: string; track: TrackData; color: [number, number, number, number] }[];
     }, [tracks, trackIds]);
 
-    return (
+    // Build pilotName → CSS color lookup for hover tooltip
+    const colorLookup = useMemo(() => {
+      const map = new Map<string, string>();
+      for (const { track, color } of trackEntities) {
+        const [r, g, b] = color;
+        map.set(track.pilotName, `rgb(${r},${g},${b})`);
+      }
+      return map;
+    }, [trackEntities]);
+
+    // Hover tooltip — direct DOM manipulation, no React re-renders
+    const tooltipRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+      let handler: ScreenSpaceEventHandler | null = null;
+
+      function trySetup() {
+        const viewer = viewerRef.current?.cesiumElement;
+        if (!viewer) {
+          requestAnimationFrame(trySetup);
+          return;
+        }
+        handler = new ScreenSpaceEventHandler(viewer.scene.canvas);
+        handler.setInputAction((movement: { endPosition: { x: number; y: number } }) => {
+          const tooltip = tooltipRef.current;
+          if (!tooltip) return;
+
+          const picked = viewer.scene.pick(movement.endPosition);
+          if (defined(picked) && picked.id?.name) {
+            const name = picked.id.name as string;
+            const color = colorLookup.get(name) || '#fff';
+            tooltip.textContent = name;
+            tooltip.style.display = 'block';
+            tooltip.style.left = `${movement.endPosition.x + 15}px`;
+            tooltip.style.top = `${movement.endPosition.y - 10}px`;
+            tooltip.style.color = color;
+          } else {
+            tooltip.style.display = 'none';
+          }
+        }, ScreenSpaceEventType.MOUSE_MOVE);
+      }
+      trySetup();
+
+      return () => handler?.destroy();
+    }, [viewerRef, colorLookup]);
+
+    return (<>
+      <div
+        ref={tooltipRef}
+        style={{
+          position: 'fixed',
+          display: 'none',
+          pointerEvents: 'none',
+          zIndex: 20,
+          fontWeight: 'bold',
+          fontSize: 12,
+          fontFamily: 'system-ui',
+          textShadow: '0 0 3px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.5)',
+          whiteSpace: 'nowrap',
+        }}
+      />
       <Viewer
         ref={viewerRef}
         full
@@ -122,5 +184,5 @@ export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, sta
           />
         ))}
       </Viewer>
-    );
+    </>);
 }
