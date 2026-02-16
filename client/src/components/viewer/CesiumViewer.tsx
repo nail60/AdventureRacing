@@ -145,20 +145,7 @@ export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, sta
     }, [viewerRef, colorLookup]);
 
     return (<>
-      <div
-        ref={tooltipRef}
-        style={{
-          position: 'fixed',
-          display: 'none',
-          pointerEvents: 'none',
-          zIndex: 20,
-          fontWeight: 'bold',
-          fontSize: 12,
-          fontFamily: 'system-ui',
-          textShadow: '0 0 3px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.5)',
-          whiteSpace: 'nowrap',
-        }}
-      />
+      <div ref={tooltipRef} style={tooltipStyle} />
       <Viewer
         ref={viewerRef}
         full
@@ -186,3 +173,15 @@ export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, sta
       </Viewer>
     </>);
 }
+
+const tooltipStyle: React.CSSProperties = {
+  position: 'fixed',
+  display: 'none',
+  pointerEvents: 'none',
+  zIndex: 20,
+  fontWeight: 'bold',
+  fontSize: 12,
+  fontFamily: 'system-ui',
+  textShadow: '0 0 3px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.5)',
+  whiteSpace: 'nowrap',
+};

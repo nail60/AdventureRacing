@@ -54,6 +54,9 @@ export function usePlayback(
     setPlaying(viewer.clock.shouldAnimate);
   }, [getViewer]);
 
+  const speedIndexRef = useRef(speedIndex);
+  speedIndexRef.current = speedIndex;
+
   const setSpeed = useCallback((index: number) => {
     const viewer = getViewer();
     if (!viewer) return;
@@ -62,8 +65,8 @@ export function usePlayback(
     viewer.clock.multiplier = SPEED_OPTIONS[clamped];
   }, [getViewer]);
 
-  const speedUp = useCallback(() => setSpeed(speedIndex + 1), [speedIndex, setSpeed]);
-  const speedDown = useCallback(() => setSpeed(speedIndex - 1), [speedIndex, setSpeed]);
+  const speedUp = useCallback(() => setSpeed(speedIndexRef.current + 1), [setSpeed]);
+  const speedDown = useCallback(() => setSpeed(speedIndexRef.current - 1), [setSpeed]);
 
   const seekTo = useCallback((seconds: number) => {
     const viewer = getViewer();

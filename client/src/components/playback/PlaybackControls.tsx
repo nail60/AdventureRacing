@@ -1,4 +1,4 @@
-import { JulianDate } from 'cesium';
+import { memo } from 'react';
 
 interface Props {
   playing: boolean;
@@ -9,7 +9,7 @@ interface Props {
   speedDown: () => void;
 }
 
-export function PlaybackControls({
+export const PlaybackControls = memo(function PlaybackControls({
   playing,
   togglePlay,
   speedIndex,
@@ -18,11 +18,7 @@ export function PlaybackControls({
   speedDown,
 }: Props) {
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 8,
-    }}>
+    <div style={containerStyle}>
       <button onClick={togglePlay} style={btnStyle}>
         {playing ? '||' : '\u25B6'}
       </button>
@@ -30,7 +26,7 @@ export function PlaybackControls({
       <button onClick={speedDown} disabled={speedIndex === 0} style={btnStyle}>
         -
       </button>
-      <span style={{ fontSize: 13, color: '#ccc', minWidth: 40, textAlign: 'center' }}>
+      <span style={speedLabelStyle}>
         {speedOptions[speedIndex]}x
       </span>
       <button onClick={speedUp} disabled={speedIndex === speedOptions.length - 1} style={btnStyle}>
@@ -38,7 +34,13 @@ export function PlaybackControls({
       </button>
     </div>
   );
-}
+});
+
+const containerStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+};
 
 const btnStyle: React.CSSProperties = {
   background: 'rgba(30,30,30,0.9)',
@@ -49,4 +51,11 @@ const btnStyle: React.CSSProperties = {
   fontSize: 14,
   cursor: 'pointer',
   minWidth: 36,
+};
+
+const speedLabelStyle: React.CSSProperties = {
+  fontSize: 13,
+  color: '#ccc',
+  minWidth: 40,
+  textAlign: 'center',
 };
