@@ -45,7 +45,10 @@ export function SceneViewerPage() {
 
   // null = no user overrides yet, treat all tracks as visible
   const [visibilityOverride, setVisibilityOverride] = useState<Set<string> | null>(null);
-  const visibleTrackIds = visibilityOverride ?? new Set(trackIds);
+  const visibleTrackIds = useMemo(
+    () => visibilityOverride ?? new Set(trackIds),
+    [visibilityOverride, trackIds]
+  );
 
   const toggleTrack = useCallback((id: string) => {
     setVisibilityOverride(prev => {
@@ -81,9 +84,6 @@ export function SceneViewerPage() {
   }, [tracks]);
 
   const playback = usePlayback(viewerRef, startTime, stopTime);
-
-  // Debug info
-  console.log('[SceneViewer] loading:', loading, 'error:', error, 'tracks:', tracks.size, 'trackIds:', trackIds.length, 'visible:', visibleTrackIds.size);
 
   if (loading) {
     return (
@@ -129,10 +129,12 @@ export function SceneViewerPage() {
     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
       <ViewerErrorBoundary>
         <CesiumViewer
-          ref={viewerRef}
+          viewerRef={viewerRef}
           tracks={tracks}
           trackIds={trackIds}
           visibleTrackIds={visibleTrackIds}
+          startTime={startTime}
+          stopTime={stopTime}
         />
       </ViewerErrorBoundary>
 

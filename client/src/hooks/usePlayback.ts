@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { JulianDate, ClockRange, ClockStep } from 'cesium';
+import { JulianDate } from 'cesium';
 import type { CesiumComponentRef } from 'resium';
 import type { Viewer as CesiumViewer } from 'cesium';
 
@@ -54,6 +54,9 @@ export function usePlayback(
     setPlaying(viewer.clock.shouldAnimate);
   }, [getViewer]);
 
+  const speedIndexRef = useRef(speedIndex);
+  speedIndexRef.current = speedIndex;
+
   const setSpeed = useCallback((index: number) => {
     const viewer = getViewer();
     if (!viewer) return;
@@ -62,8 +65,8 @@ export function usePlayback(
     viewer.clock.multiplier = SPEED_OPTIONS[clamped];
   }, [getViewer]);
 
-  const speedUp = useCallback(() => setSpeed(speedIndex + 1), [speedIndex, setSpeed]);
-  const speedDown = useCallback(() => setSpeed(speedIndex - 1), [speedIndex, setSpeed]);
+  const speedUp = useCallback(() => setSpeed(speedIndexRef.current + 1), [setSpeed]);
+  const speedDown = useCallback(() => setSpeed(speedIndexRef.current - 1), [setSpeed]);
 
   const seekTo = useCallback((seconds: number) => {
     const viewer = getViewer();
@@ -85,34 +88,8 @@ export function usePlayback(
     }
   }, [getViewer, startTime, stopTime]);
 
-  // Initialize clock settings when times are available
-  // Retry until viewer is ready since the ref may not be populated on first effect run
-  const clockInitialized = useRef(false);
-  useEffect(() => {
-    if (!startTime || !stopTime) return;
-    clockInitialized.current = false;
-
-    function tryInit() {
-      if (clockInitialized.current) return;
-      const viewer = getViewer();
-      if (!viewer) {
-        // Viewer not ready yet, retry on next frame
-        requestAnimationFrame(tryInit);
-        return;
-      }
-
-      viewer.clock.startTime = startTime;
-      viewer.clock.stopTime = stopTime;
-      viewer.clock.currentTime = JulianDate.clone(startTime);
-      viewer.clock.clockRange = ClockRange.LOOP_STOP;
-      viewer.clock.clockStep = ClockStep.SYSTEM_CLOCK_MULTIPLIER;
-      viewer.clock.multiplier = SPEED_OPTIONS[speedIndex];
-      viewer.clock.shouldAnimate = false;
-      clockInitialized.current = true;
-      setPlaying(false);
-    }
-    tryInit();
-  }, [getViewer, startTime, stopTime]); // removed speedIndex dep to avoid resetting clock
+  // Clock start/stop/currentTime is initialized by CesiumViewer directly
+  // (avoids ref timing issues with useImperativeHandle chain)
 
   return {
     playing,

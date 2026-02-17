@@ -20,7 +20,7 @@ interface Props {
 }
 
 export const TrackEntity = memo(function TrackEntity({ track, color, visible }: Props) {
-  const { positionProperty, cesiumColor } = useMemo(() => {
+  const { positionProperty, pointGraphics, pathGraphics, labelGraphics } = useMemo(() => {
     const positionProperty = new SampledPositionProperty();
     positionProperty.setInterpolationOptions({
       interpolationDegree: 1,
@@ -38,40 +38,47 @@ export const TrackEntity = memo(function TrackEntity({ track, color, visible }: 
 
     const cesiumColor = new Color(color[0] / 255, color[1] / 255, color[2] / 255, color[3] / 255);
 
-    return { positionProperty, cesiumColor };
+    const pointGraphics = {
+      pixelSize: 8,
+      color: cesiumColor,
+      outlineColor: Color.WHITE,
+      outlineWidth: 1,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      scaleByDistance: new NearFarScalar(1000, 1.5, 500000, 0.5),
+    };
+
+    const pathGraphics = {
+      resolution: 60,
+      material: cesiumColor,
+      width: 2,
+      trailTime: 86400,
+      leadTime: 0,
+    };
+
+    const labelGraphics = {
+      text: track.pilotName,
+      font: '13px sans-serif',
+      fillColor: cesiumColor,
+      outlineColor: Color.BLACK,
+      outlineWidth: 2,
+      style: LabelStyle.FILL_AND_OUTLINE,
+      pixelOffset: new Cartesian2(0, -20),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      distanceDisplayCondition: new DistanceDisplayCondition(0, 100000),
+      scaleByDistance: new NearFarScalar(1000, 1, 100000, 0.3),
+    };
+
+    return { positionProperty, pointGraphics, pathGraphics, labelGraphics };
   }, [track, color]);
 
   return (
     <Entity
+      name={track.pilotName}
       show={visible}
       position={positionProperty}
-      point={{
-        pixelSize: 8,
-        color: cesiumColor,
-        outlineColor: Color.WHITE,
-        outlineWidth: 1,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        scaleByDistance: new NearFarScalar(1000, 1.5, 500000, 0.5),
-      }}
-      path={{
-        resolution: 60,
-        material: cesiumColor,
-        width: 2,
-        trailTime: 86400,
-        leadTime: 0,
-      }}
-      label={{
-        text: track.pilotName,
-        font: '13px sans-serif',
-        fillColor: cesiumColor,
-        outlineColor: Color.BLACK,
-        outlineWidth: 2,
-        style: LabelStyle.FILL_AND_OUTLINE,
-        pixelOffset: new Cartesian2(0, -20),
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        distanceDisplayCondition: new DistanceDisplayCondition(0, 100000),
-        scaleByDistance: new NearFarScalar(1000, 1, 100000, 0.3),
-      }}
+      point={pointGraphics}
+      path={pathGraphics}
+      label={labelGraphics}
     />
   );
 });

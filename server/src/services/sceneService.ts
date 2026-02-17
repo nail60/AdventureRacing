@@ -3,7 +3,9 @@ import { getDb } from '../db/database.js';
 import * as s3 from './s3Service.js';
 import { parseIGC } from '../parsers/igcParser.js';
 import { parseKMZ } from '../parsers/kmzParser.js';
+import { cleanTrack } from '../parsers/trackCleaner.js';
 import { compressTracks } from '../compression/trackSimplifier.js';
+import { computeTrackMetrics } from '../compression/trackMetrics.js';
 import { config } from '../config.js';
 import type { TrackData, SceneMeta, SceneDetail, TracklogMeta } from '@adventure-racing/shared';
 
@@ -52,7 +54,8 @@ async function processScene(sceneId: string, files: UploadedFile[]) {
       continue;
     }
 
-    for (const track of tracks) {
+    for (let track of tracks) {
+      track = cleanTrack(track);
       const tracklogId = uuid();
       const s3Key = `tracklogs/${tracklogId}.json`;
       const rawS3Key = `tracklogs/${tracklogId}/raw/${file.originalname}`;
@@ -87,14 +90,15 @@ async function processScene(sceneId: string, files: UploadedFile[]) {
     }
   }
 
-  // Compress all tracks for the scene
+  // Compress all tracks for the scene and compute metrics
   const rawTracks = allTracks.map(t => t.track);
   const compressed = compressTracks(rawTracks, config.maxSceneSize);
+  const withMetrics = compressed.map(t => computeTrackMetrics(t));
 
   // Store compressed tracks in S3
   for (let i = 0; i < allTracks.length; i++) {
     const { tracklogId } = allTracks[i];
-    const compressedTrack = compressed[i];
+    const compressedTrack = withMetrics[i];
     const compressedKey = `scenes/${sceneId}/tracks/${tracklogId}.json`;
 
     await s3.putObject(compressedKey, JSON.stringify(compressedTrack));
