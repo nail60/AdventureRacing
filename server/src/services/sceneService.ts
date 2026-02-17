@@ -3,7 +3,6 @@ import { getDb } from '../db/database.js';
 import * as s3 from './s3Service.js';
 import { parseIGC } from '../parsers/igcParser.js';
 import { parseKMZ } from '../parsers/kmzParser.js';
-import { cleanTrack } from '../parsers/trackCleaner.js';
 import { compressTracks } from '../compression/trackSimplifier.js';
 import { computeTrackMetrics } from '../compression/trackMetrics.js';
 import { config } from '../config.js';
@@ -42,20 +41,24 @@ async function processScene(sceneId: string, files: UploadedFile[]) {
     const ext = file.originalname.toLowerCase().split('.').pop();
     let tracks: TrackData[];
 
-    if (ext === 'igc') {
-      tracks = parseIGC(file.buffer.toString('utf-8'), file.originalname);
-    } else if (ext === 'kmz') {
-      tracks = await parseKMZ(file.buffer, file.originalname);
-    } else if (ext === 'kml') {
-      const { parseKML } = await import('../parsers/kmzParser.js');
-      tracks = parseKML(file.buffer.toString('utf-8'), file.originalname);
-    } else {
-      console.warn(`Skipping unsupported file: ${file.originalname}`);
+    try {
+      if (ext === 'igc') {
+        tracks = parseIGC(file.buffer.toString('utf-8'), file.originalname);
+      } else if (ext === 'kmz') {
+        tracks = await parseKMZ(file.buffer, file.originalname);
+      } else if (ext === 'kml') {
+        const { parseKML } = await import('../parsers/kmzParser.js');
+        tracks = parseKML(file.buffer.toString('utf-8'), file.originalname);
+      } else {
+        console.warn(`Skipping unsupported file: ${file.originalname}`);
+        continue;
+      }
+    } catch (parseErr: any) {
+      console.warn(`Skipping file ${file.originalname}: ${parseErr.message}`);
       continue;
     }
 
-    for (let track of tracks) {
-      track = cleanTrack(track);
+    for (const track of tracks) {
       const tracklogId = uuid();
       const s3Key = `tracklogs/${tracklogId}.json`;
       const rawS3Key = `tracklogs/${tracklogId}/raw/${file.originalname}`;
