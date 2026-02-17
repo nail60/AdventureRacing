@@ -22,15 +22,15 @@ Before running the server, ensure you have:
 The server configuration is managed via environment variables. Ensure a `.env` file exists in the root of the monorepo with the following variables:
 
 ```env
-PORT=3001
-DATABASE_PATH=./data/adventure-racing.db
-
 # MinIO / S3 Configuration
 S3_ENDPOINT=http://localhost:9000
 S3_ACCESS_KEY=minioadmin
 S3_SECRET_KEY=minioadmin
 S3_BUCKET=adventure-racing
 S3_REGION=us-east-1
+
+PORT=3001
+DATABASE_PATH=./data/adventure-racing.db
 ```
 
 ## Development
