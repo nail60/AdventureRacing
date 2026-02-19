@@ -101,19 +101,26 @@ export function usePlayback(
     syncUI();
   }, [getViewer, startTime, stopTime, syncUI]);
 
-  // Clock start/stop/currentTime is initialized by CesiumViewer directly
-  // (avoids ref timing issues with useImperativeHandle chain)
+  const stopPlayback = useCallback(() => {
+    const viewer = getViewer();
+    if (viewer) viewer.clock.shouldAnimate = false;
+    setPlaying(false);
+  }, [getViewer]);
 
   return {
     playing,
     togglePlay,
     speedIndex,
     speedOptions: SPEED_OPTIONS,
+    setSpeed,
     speedUp,
     speedDown,
     seekTo,
     jump,
     sliderRef,
     timeDisplayRef,
+    syncUI,
+    getViewer,
+    stopPlayback,
   };
 }

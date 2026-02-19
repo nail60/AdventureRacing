@@ -73,8 +73,10 @@ export function computeTrackMetrics(track: TrackData): TrackData {
     }
 
     // Optimized distance: max of d(start,j) + d(j,i) for j in [0..i]
+    // Sample at most ~200 candidate turnpoints to keep this O(n) instead of O(n²)
     let best = distFromStart[i]; // j=0: d(start,0) + d(0,i) = 0 + distFromStart[i]
-    for (let j = 1; j <= i; j++) {
+    const step = Math.max(1, Math.floor(i / 200));
+    for (let j = 1; j <= i; j += step) {
       const candidate = distFromStart[j] + haversineM(
         track.positions[j][0], track.positions[j][1],
         track.positions[i][0], track.positions[i][1]

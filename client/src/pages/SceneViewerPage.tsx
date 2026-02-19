@@ -1,14 +1,16 @@
-import { useState, useRef, useMemo, useCallback, Component, type ReactNode, type ErrorInfo } from 'react';
+import { useState, useRef, useMemo, useCallback, useEffect, Component, type ReactNode, type ErrorInfo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { JulianDate } from 'cesium';
 import type { Viewer as CesiumViewerType } from 'cesium';
 import type { CesiumComponentRef } from 'resium';
 import { useSceneDetail } from '../hooks/useSceneDetail';
 import { usePlayback } from '../hooks/usePlayback';
+import { useIsMobile } from '../hooks/useIsMobile';
 import { CesiumViewer } from '../components/viewer/CesiumViewer';
 import { PlaybackControls } from '../components/playback/PlaybackControls';
 import { TimeSlider } from '../components/playback/TimeSlider';
-import { JumpButtons } from '../components/playback/JumpButtons';
+import { SpeedButtons } from '../components/playback/SpeedButtons';
+import { IntensityScrubber } from '../components/playback/IntensityScrubber';
 import { TrackSidebar } from '../components/sidebar/TrackSidebar';
 
 // Error boundary to catch Cesium/Resium crashes and show them on screen
@@ -35,6 +37,7 @@ class ViewerErrorBoundary extends Component<{ children: ReactNode }, { error: Er
 export function SceneViewerPage() {
   const { id } = useParams<{ id: string }>();
   const { scene, tracks, loading, error } = useSceneDetail(id!);
+  const isMobile = useIsMobile();
 
   const viewerRef = useRef<CesiumComponentRef<CesiumViewerType>>(null);
 
@@ -62,6 +65,13 @@ export function SceneViewerPage() {
 
   const showAll = useCallback(() => setVisibilityOverride(new Set(trackIds)), [trackIds]);
   const hideAll = useCallback(() => setVisibilityOverride(new Set()), []);
+
+  // Sidebar collapse state — defaults collapsed on mobile, expanded on desktop
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(isMobile);
+  useEffect(() => {
+    setSidebarCollapsed(isMobile);
+  }, [isMobile]);
+  const toggleSidebar = useCallback(() => setSidebarCollapsed(prev => !prev), []);
 
   // Compute time bounds from all tracks
   const { startTime, stopTime } = useMemo(() => {
@@ -97,7 +107,9 @@ export function SceneViewerPage() {
         background: '#0a0a0a',
       }}>
         <div style={{ fontSize: 18, color: '#aaa' }}>
-          {scene?.status === 'processing' ? 'Processing tracks...' : 'Loading scene...'}
+          {scene?.status === 'processing'
+            ? (scene.processingStep || 'Processing tracks...')
+            : 'Loading scene...'}
         </div>
         {scene && (
           <div style={{ fontSize: 14, color: '#666' }}>
@@ -138,29 +150,12 @@ export function SceneViewerPage() {
         />
       </ViewerErrorBoundary>
 
-      {/* Playback bar overlay */}
-      <div style={{
-        position: 'absolute',
-        bottom: 10,
-        left: 10,
-        right: 260,
-        background: 'rgba(20,20,20,0.92)',
-        borderRadius: 8,
-        padding: 10,
-        zIndex: 10,
-        border: '1px solid #333',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-      }}>
+      {/* Playback bar overlay — full width on all devices */}
+      <div style={playbackBarStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <PlaybackControls
             playing={playback.playing}
             togglePlay={playback.togglePlay}
-            speedIndex={playback.speedIndex}
-            speedOptions={playback.speedOptions}
-            speedUp={playback.speedUp}
-            speedDown={playback.speedDown}
           />
           <TimeSlider
             sliderRef={playback.sliderRef}
@@ -168,7 +163,19 @@ export function SceneViewerPage() {
             onSeek={playback.seekTo}
           />
         </div>
-        <JumpButtons onJump={playback.jump} />
+        {isMobile ? (
+          <IntensityScrubber
+            getViewer={playback.getViewer}
+            syncUI={playback.syncUI}
+            onStop={playback.stopPlayback}
+          />
+        ) : (
+          <SpeedButtons
+            speedOptions={playback.speedOptions}
+            speedIndex={playback.speedIndex}
+            onSetSpeed={playback.setSpeed}
+          />
+        )}
       </div>
 
       {/* Back button */}
@@ -196,8 +203,26 @@ export function SceneViewerPage() {
           onToggleTrack={toggleTrack}
           onShowAll={showAll}
           onHideAll={hideAll}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={toggleSidebar}
+          isMobile={isMobile}
         />
       )}
     </div>
   );
 }
+
+const playbackBarStyle: React.CSSProperties = {
+  position: 'absolute',
+  bottom: 10,
+  left: 10,
+  right: 10,
+  background: 'rgba(20,20,20,0.92)',
+  borderRadius: 8,
+  padding: 10,
+  zIndex: 10,
+  border: '1px solid #333',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
+};

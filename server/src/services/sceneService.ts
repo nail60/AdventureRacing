@@ -1,4 +1,5 @@
 import { v4 as uuid } from 'uuid';
+import { Worker } from 'worker_threads';
 import { getDb } from '../db/database.js';
 import * as s3 from './s3Service.js';
 import { parseIGC } from '../parsers/igcParser.js';
@@ -11,6 +12,30 @@ import type { TrackData, SceneMeta, SceneDetail, TracklogMeta } from '@adventure
 interface UploadedFile {
   originalname: string;
   buffer: Buffer;
+}
+
+const workerUrl = new URL('../workers/compressionWorker.js', import.meta.url);
+
+function compressInWorker(tracks: TrackData[], maxBytes: number): Promise<TrackData[]> {
+  return new Promise<TrackData[]>((resolve, reject) => {
+    let settled = false;
+    const worker = new Worker(workerUrl, {
+      workerData: { tracks, maxBytes },
+    });
+    worker.on('message', (result: TrackData[]) => { settled = true; resolve(result); });
+    worker.on('error', (err) => { if (!settled) { settled = true; reject(err); } });
+    worker.on('exit', (code) => {
+      if (!settled && code !== 0) {
+        settled = true;
+        reject(new Error(`Compression worker exited with code ${code}`));
+      }
+    });
+  }).catch((err) => {
+    // Fallback to main-thread compression (e.g. during dev with tsx)
+    console.warn('Worker thread failed, falling back to main thread:', err.message);
+    const compressed = compressTracks(tracks, maxBytes);
+    return compressed.map(t => computeTrackMetrics(t));
+  });
 }
 
 export async function createScene(
@@ -32,12 +57,19 @@ export async function createScene(
   return { sceneId, status: 'processing' };
 }
 
+function setStep(sceneId: string, step: string) {
+  getDb().prepare('UPDATE scenes SET processing_step = ? WHERE id = ?').run(step, sceneId);
+}
+
 async function processScene(sceneId: string, files: UploadedFile[]) {
   const db = getDb();
   const allTracks: { tracklogId: string; track: TrackData }[] = [];
 
   // Parse each file and store full-res tracklogs
-  for (const file of files) {
+  for (let fi = 0; fi < files.length; fi++) {
+    const file = files[fi];
+    setStep(sceneId, `Parsing track ${fi + 1} of ${files.length}`);
+
     const ext = file.originalname.toLowerCase().split('.').pop();
     let tracks: TrackData[];
 
@@ -64,11 +96,12 @@ async function processScene(sceneId: string, files: UploadedFile[]) {
       const rawS3Key = `tracklogs/${tracklogId}/raw/${file.originalname}`;
 
       // Store full-res in S3
-      await s3.putObject(s3Key, JSON.stringify(track));
+      const trackJson = JSON.stringify(track);
+      await s3.putObject(s3Key, trackJson);
       await s3.putRawFile(rawS3Key, file.buffer);
 
       // Insert tracklog row
-      const fileSize = Buffer.byteLength(JSON.stringify(track));
+      const fileSize = Buffer.byteLength(trackJson);
       db.prepare(`
         INSERT INTO tracklogs (id, pilot_name, point_count, start_time, end_time, file_size, original_filename, s3_key)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -91,14 +124,18 @@ async function processScene(sceneId: string, files: UploadedFile[]) {
 
       allTracks.push({ tracklogId, track });
     }
+
+    // Release file buffer to free memory before compression
+    file.buffer = Buffer.alloc(0);
   }
 
-  // Compress all tracks for the scene and compute metrics
+  // Compress all tracks for the scene and compute metrics (in worker thread to avoid blocking event loop)
+  setStep(sceneId, `Compressing ${allTracks.length} tracks`);
   const rawTracks = allTracks.map(t => t.track);
-  const compressed = compressTracks(rawTracks, config.maxSceneSize);
-  const withMetrics = compressed.map(t => computeTrackMetrics(t));
+  const withMetrics = await compressInWorker(rawTracks, config.maxSceneSize);
 
   // Store compressed tracks in S3
+  setStep(sceneId, 'Saving compressed tracks');
   for (let i = 0; i < allTracks.length; i++) {
     const { tracklogId } = allTracks[i];
     const compressedTrack = withMetrics[i];
@@ -113,14 +150,14 @@ async function processScene(sceneId: string, files: UploadedFile[]) {
   }
 
   // Mark scene as ready
-  db.prepare('UPDATE scenes SET status = ? WHERE id = ?').run('ready', sceneId);
+  db.prepare('UPDATE scenes SET status = ?, processing_step = NULL WHERE id = ?').run('ready', sceneId);
   console.log(`Scene ${sceneId} processing complete`);
 }
 
 export function listScenes(): SceneMeta[] {
   const db = getDb();
   const rows = db.prepare(`
-    SELECT s.id, s.name, s.status, s.created_at,
+    SELECT s.id, s.name, s.status, s.processing_step, s.created_at,
       (SELECT COUNT(*) FROM scene_tracks WHERE scene_id = s.id) as track_count
     FROM scenes s
     ORDER BY s.created_at DESC
@@ -130,6 +167,7 @@ export function listScenes(): SceneMeta[] {
     id: row.id,
     name: row.name,
     status: row.status,
+    processingStep: row.processing_step ?? null,
     trackCount: row.track_count,
     createdAt: row.created_at,
   }));
@@ -138,7 +176,7 @@ export function listScenes(): SceneMeta[] {
 export function getSceneDetail(sceneId: string): SceneDetail | null {
   const db = getDb();
   const scene = db.prepare(`
-    SELECT s.id, s.name, s.status, s.created_at,
+    SELECT s.id, s.name, s.status, s.processing_step, s.created_at,
       (SELECT COUNT(*) FROM scene_tracks WHERE scene_id = s.id) as track_count
     FROM scenes s WHERE s.id = ?
   `).get(sceneId) as any;
@@ -158,6 +196,7 @@ export function getSceneDetail(sceneId: string): SceneDetail | null {
     id: scene.id,
     name: scene.name,
     status: scene.status,
+    processingStep: scene.processing_step ?? null,
     trackCount: scene.track_count,
     createdAt: scene.created_at,
     tracks: tracks.map(t => ({

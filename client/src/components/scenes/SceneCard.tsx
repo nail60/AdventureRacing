@@ -39,6 +39,11 @@ export function SceneCard({ scene, onDelete }: Props) {
         <span>{scene.trackCount} track{scene.trackCount !== 1 ? 's' : ''}</span>
         <span>{formatDate(scene.createdAt)}</span>
       </div>
+      {scene.status === 'processing' && scene.processingStep && (
+        <div style={{ fontSize: 12, color: '#ff9800', marginTop: 6 }}>
+          {scene.processingStep}
+        </div>
+      )}
       {onDelete && (
         <button
           onClick={() => onDelete(scene.id)}

@@ -23,6 +23,7 @@ export interface SceneMeta {
   id: string;
   name: string;
   status: 'processing' | 'ready' | 'error';
+  processingStep?: string | null;
   trackCount: number;
   createdAt: string;
 }

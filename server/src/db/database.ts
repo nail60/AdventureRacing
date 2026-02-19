@@ -49,4 +49,10 @@ function runMigrations(db: Database.Database) {
       PRIMARY KEY (scene_id, tracklog_id)
     );
   `);
+
+  // Add processing_step column if missing (idempotent migration)
+  const cols = db.prepare("PRAGMA table_info(scenes)").all() as { name: string }[];
+  if (!cols.some(c => c.name === 'processing_step')) {
+    db.exec("ALTER TABLE scenes ADD COLUMN processing_step TEXT");
+  }
 }

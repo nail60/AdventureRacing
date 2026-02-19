@@ -1,19 +1,20 @@
 import type { TrackData } from '@adventure-racing/shared';
 
+const ALT_SCALE = 1 / 100000;
+
 /**
- * 3D Ramer-Douglas-Peucker simplification.
+ * 3D perpendicular distance from a point to a line segment.
  * Altitude is normalized (÷100000) to be proportional to degree-based lat/lon.
  */
-function perpendicularDistance3D(
-  point: [number, number, number],
-  lineStart: [number, number, number],
-  lineEnd: [number, number, number]
+function perpDist3D(
+  positions: [number, number, number][],
+  idx: number,
+  startIdx: number,
+  endIdx: number
 ): number {
-  const altScale = 1 / 100000;
-
-  const px = point[0], py = point[1], pz = point[2] * altScale;
-  const ax = lineStart[0], ay = lineStart[1], az = lineStart[2] * altScale;
-  const bx = lineEnd[0], by = lineEnd[1], bz = lineEnd[2] * altScale;
+  const px = positions[idx][0], py = positions[idx][1], pz = positions[idx][2] * ALT_SCALE;
+  const ax = positions[startIdx][0], ay = positions[startIdx][1], az = positions[startIdx][2] * ALT_SCALE;
+  const bx = positions[endIdx][0], by = positions[endIdx][1], bz = positions[endIdx][2] * ALT_SCALE;
 
   const dx = bx - ax, dy = by - ay, dz = bz - az;
   const lenSq = dx * dx + dy * dy + dz * dz;
@@ -27,105 +28,105 @@ function perpendicularDistance3D(
     ((px - ax) * dx + (py - ay) * dy + (pz - az) * dz) / lenSq
   ));
 
-  const projX = ax + t * dx;
-  const projY = ay + t * dy;
-  const projZ = az + t * dz;
-
-  const ex = px - projX, ey = py - projY, ez = pz - projZ;
+  const ex = px - (ax + t * dx);
+  const ey = py - (ay + t * dy);
+  const ez = pz - (az + t * dz);
   return Math.sqrt(ex * ex + ey * ey + ez * ez);
 }
 
-function rdp3D(
-  positions: [number, number, number][],
-  timestamps: number[],
-  epsilon: number
-): { positions: [number, number, number][]; timestamps: number[] } {
-  if (positions.length <= 2) {
-    return { positions: [...positions], timestamps: [...timestamps] };
-  }
+/**
+ * Iterative stack-based RDP. Returns a boolean array marking which indices to keep.
+ * Zero intermediate array allocations — operates on the original array by index.
+ */
+function rdp3D(positions: [number, number, number][], epsilon: number): boolean[] {
+  const n = positions.length;
+  const keep = new Array<boolean>(n).fill(false);
+  keep[0] = true;
+  if (n > 1) keep[n - 1] = true;
+  if (n <= 2) return keep;
 
-  let maxDist = 0;
-  let maxIdx = 0;
-  const first = positions[0];
-  const last = positions[positions.length - 1];
+  // Use a flat stack of pairs [start, end]
+  const stack: number[] = [0, n - 1];
 
-  for (let i = 1; i < positions.length - 1; i++) {
-    const dist = perpendicularDistance3D(positions[i], first, last);
-    if (dist > maxDist) {
-      maxDist = dist;
-      maxIdx = i;
+  while (stack.length > 0) {
+    const end = stack.pop()!;
+    const start = stack.pop()!;
+
+    let maxDist = 0;
+    let maxIdx = start;
+
+    for (let i = start + 1; i < end; i++) {
+      const dist = perpDist3D(positions, i, start, end);
+      if (dist > maxDist) {
+        maxDist = dist;
+        maxIdx = i;
+      }
+    }
+
+    if (maxDist > epsilon) {
+      keep[maxIdx] = true;
+      if (maxIdx - start > 1) { stack.push(start, maxIdx); }
+      if (end - maxIdx > 1) { stack.push(maxIdx, end); }
     }
   }
 
-  if (maxDist > epsilon) {
-    const left = rdp3D(
-      positions.slice(0, maxIdx + 1),
-      timestamps.slice(0, maxIdx + 1),
-      epsilon
-    );
-    const right = rdp3D(
-      positions.slice(maxIdx),
-      timestamps.slice(maxIdx),
-      epsilon
-    );
-
-    return {
-      positions: [...left.positions.slice(0, -1), ...right.positions],
-      timestamps: [...left.timestamps.slice(0, -1), ...right.timestamps],
-    };
-  }
-
-  return {
-    positions: [first, last],
-    timestamps: [timestamps[0], timestamps[timestamps.length - 1]],
-  };
+  return keep;
 }
 
 function simplifyTrack(track: TrackData, epsilon: number): TrackData {
-  const result = rdp3D(track.positions, track.timestamps, epsilon);
-  return {
-    pilotName: track.pilotName,
-    timestamps: result.timestamps,
-    positions: result.positions,
-  };
+  const keep = rdp3D(track.positions, epsilon);
+  const positions: [number, number, number][] = [];
+  const timestamps: number[] = [];
+
+  for (let i = 0; i < keep.length; i++) {
+    if (keep[i]) {
+      positions.push(track.positions[i]);
+      timestamps.push(track.timestamps[i]);
+    }
+  }
+
+  return { pilotName: track.pilotName, timestamps, positions };
 }
 
-function estimateSize(tracks: TrackData[]): number {
-  return Buffer.byteLength(JSON.stringify(tracks));
+function totalPoints(tracks: TrackData[]): number {
+  let n = 0;
+  for (const t of tracks) n += t.positions.length;
+  return n;
 }
 
 /**
  * Compress tracks to fit under maxBytes total.
  * Uses binary search on epsilon to find the minimum simplification needed.
+ * Point-count-based estimation avoids repeated JSON.stringify (memory-safe).
  */
 export function compressTracks(tracks: TrackData[], maxBytes: number): TrackData[] {
-  const currentSize = estimateSize(tracks);
-  if (currentSize <= maxBytes) {
+  const origPoints = totalPoints(tracks);
+  const sampleTrack = tracks.reduce((a, b) => a.positions.length > b.positions.length ? a : b);
+  const sampleBytes = Buffer.byteLength(JSON.stringify(sampleTrack));
+  const bytesPerPoint = sampleBytes / sampleTrack.positions.length;
+  const estimatedSize = origPoints * bytesPerPoint;
+
+  if (estimatedSize <= maxBytes) {
     return tracks;
   }
+
+  const targetPoints = Math.floor(origPoints * (maxBytes / estimatedSize));
 
   let lo = 0.000001;
   let hi = 1.0;
   let bestTracks = tracks;
 
-  for (let iter = 0; iter < 30; iter++) {
+  for (let iter = 0; iter < 15; iter++) {
     const mid = (lo + hi) / 2;
     const simplified = tracks.map(t => simplifyTrack(t, mid));
-    const size = estimateSize(simplified);
+    const pts = totalPoints(simplified);
 
-    if (size <= maxBytes) {
+    if (pts <= targetPoints) {
       bestTracks = simplified;
       hi = mid;
     } else {
       lo = mid;
     }
-  }
-
-  // Final pass with hi epsilon to ensure we're under the limit
-  const finalTracks = tracks.map(t => simplifyTrack(t, hi));
-  const finalSize = estimateSize(finalTracks);
-  if (finalSize <= maxBytes) {
-    return finalTracks;
   }
 
   return bestTracks;

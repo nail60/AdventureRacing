@@ -9,10 +9,22 @@ interface Props {
   onToggleTrack: (trackId: string) => void;
   onShowAll: () => void;
   onHideAll: () => void;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+  isMobile: boolean;
 }
 
-export const TrackSidebar = memo(function TrackSidebar({ scene, trackIds, visibleTrackIds, onToggleTrack, onShowAll, onHideAll }: Props) {
-  // Pre-build lookup to avoid O(n*m) find() per track
+export const TrackSidebar = memo(function TrackSidebar({
+  scene,
+  trackIds,
+  visibleTrackIds,
+  onToggleTrack,
+  onShowAll,
+  onHideAll,
+  collapsed,
+  onToggleCollapse,
+  isMobile,
+}: Props) {
   const pilotNameMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const t of scene.tracks) {
@@ -21,9 +33,24 @@ export const TrackSidebar = memo(function TrackSidebar({ scene, trackIds, visibl
     return map;
   }, [scene]);
 
+  if (collapsed) {
+    return (
+      <button onClick={onToggleCollapse} style={collapsedBtnStyle}>
+        {'\u{1FA82}'} {'\u2630'}
+      </button>
+    );
+  }
+
+  const containerStyle: React.CSSProperties = isMobile
+    ? mobileContainerStyle
+    : desktopContainerStyle;
+
   return (
     <div style={containerStyle}>
-      <h3 style={titleStyle}>{scene.name}</h3>
+      <div style={headerStyle}>
+        <h3 style={titleStyle}>{scene.name}</h3>
+        <button onClick={onToggleCollapse} style={closeBtnStyle}>{'\u2715'}</button>
+      </div>
       <div style={btnRowStyle}>
         <button onClick={onShowAll} style={smallBtn}>Show All</button>
         <button onClick={onHideAll} style={smallBtn}>Hide All</button>
@@ -44,24 +71,66 @@ export const TrackSidebar = memo(function TrackSidebar({ scene, trackIds, visibl
   );
 });
 
-const containerStyle: React.CSSProperties = {
+const collapsedBtnStyle: React.CSSProperties = {
   position: 'absolute',
   top: 10,
   right: 10,
-  width: 240,
+  background: 'rgba(20,20,20,0.92)',
+  border: '1px solid #333',
+  color: '#fff',
+  padding: '12px 16px',
+  borderRadius: 8,
+  fontSize: 20,
+  cursor: 'pointer',
+  zIndex: 30,
+  minWidth: 48,
+  minHeight: 48,
+};
+
+const baseContainerStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 10,
   maxHeight: 'calc(100vh - 120px)',
   background: 'rgba(20,20,20,0.92)',
   borderRadius: 8,
   padding: 12,
   overflow: 'auto',
-  zIndex: 10,
+  zIndex: 30,
   border: '1px solid #333',
+};
+
+const desktopContainerStyle: React.CSSProperties = {
+  ...baseContainerStyle,
+  right: 10,
+  width: 360,
+};
+
+const mobileContainerStyle: React.CSSProperties = {
+  ...baseContainerStyle,
+  left: 10,
+  right: 10,
+};
+
+const headerStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  marginBottom: 8,
 };
 
 const titleStyle: React.CSSProperties = {
   fontSize: 14,
-  marginBottom: 8,
   color: '#fff',
+  margin: 0,
+};
+
+const closeBtnStyle: React.CSSProperties = {
+  background: 'none',
+  border: 'none',
+  color: '#888',
+  fontSize: 16,
+  cursor: 'pointer',
+  padding: '2px 6px',
 };
 
 const btnRowStyle: React.CSSProperties = {
