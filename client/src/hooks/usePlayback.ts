@@ -22,30 +22,41 @@ export function usePlayback(
     return viewerRef.current?.cesiumElement;
   }, [viewerRef]);
 
-  // Sync slider/display via direct DOM manipulation — no React state updates
-  useEffect(() => {
-    function tick() {
-      const viewer = getViewer();
-      if (viewer && startTime && stopTime) {
-        const current = viewer.clock.currentTime;
-        const elapsed = JulianDate.secondsDifference(current, startTime);
-        const total = JulianDate.secondsDifference(stopTime, startTime);
+  // One-shot sync of slider/display from viewer clock
+  const syncUI = useCallback(() => {
+    const viewer = getViewer();
+    if (!viewer || !startTime || !stopTime) return;
+    const current = viewer.clock.currentTime;
+    const elapsed = JulianDate.secondsDifference(current, startTime);
+    const total = JulianDate.secondsDifference(stopTime, startTime);
 
-        if (sliderRef.current) {
-          sliderRef.current.value = String(Math.max(0, Math.min(total, elapsed)));
-          sliderRef.current.max = String(total);
-        }
-        if (timeDisplayRef.current) {
-          timeDisplayRef.current.textContent = JulianDate.toDate(current).toLocaleTimeString();
-        }
-      }
+    if (sliderRef.current) {
+      sliderRef.current.value = String(Math.max(0, Math.min(total, elapsed)));
+      sliderRef.current.max = String(total);
+    }
+    if (timeDisplayRef.current) {
+      timeDisplayRef.current.textContent = JulianDate.toDate(current).toLocaleTimeString();
+    }
+  }, [getViewer, startTime, stopTime]);
+
+  // RAF loop — only runs while playing
+  useEffect(() => {
+    if (!playing) return;
+
+    function tick() {
+      syncUI();
       rafRef.current = requestAnimationFrame(tick);
     }
     rafRef.current = requestAnimationFrame(tick);
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current);
     };
-  }, [getViewer, startTime, stopTime]);
+  }, [playing, syncUI]);
+
+  // Initial sync when times become available
+  useEffect(() => {
+    syncUI();
+  }, [syncUI]);
 
   const togglePlay = useCallback(() => {
     const viewer = getViewer();
@@ -73,7 +84,8 @@ export function usePlayback(
     if (!viewer || !startTime) return;
     const newTime = JulianDate.addSeconds(startTime, seconds, new JulianDate());
     viewer.clock.currentTime = newTime;
-  }, [getViewer, startTime]);
+    syncUI();
+  }, [getViewer, startTime, syncUI]);
 
   const jump = useCallback((seconds: number) => {
     const viewer = getViewer();
@@ -86,7 +98,8 @@ export function usePlayback(
     } else {
       viewer.clock.currentTime = newTime;
     }
-  }, [getViewer, startTime, stopTime]);
+    syncUI();
+  }, [getViewer, startTime, stopTime, syncUI]);
 
   // Clock start/stop/currentTime is initialized by CesiumViewer directly
   // (avoids ref timing issues with useImperativeHandle chain)

@@ -18,7 +18,7 @@ export const config = {
     bucket: process.env.S3_BUCKET || 'adventure-racing',
     region: process.env.S3_REGION || 'us-east-1',
   },
-  maxFileSize: 50 * 1024 * 1024, // 50MB per file
+  maxFileSize: 100 * 1024 * 1024, // 100MB per file
   maxFiles: 120,
   maxSceneSize: 10_000_000, // 10MB compressed scene target
 };

@@ -35,9 +35,9 @@ export function UploadWizard() {
   return (
     <div style={{
       background: '#161616',
-      borderRadius: 12,
+      borderRadius: 8,
       padding: 24,
-      maxWidth: 600,
+      border: '1px solid #333',
     }}>
       <h2 style={{ fontSize: 20, marginBottom: 16 }}>Create New Scene</h2>
 
