@@ -2,6 +2,8 @@ app = 'adventure-racing'
 primary_region = 'cdg'
 
 [build]
+  [build.args]
+    VITE_CESIUM_ION_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyNTU1OTI4Ny01MTFlLTQ0YjYtOWJhZS0yNzBmYzI1YTgxYmMiLCJpZCI6MzkwNDI1LCJpYXQiOjE3NzEwMDkzMDF9.W_jzs-cqjKDT7MeK2NHHFuTPFsAAIgFQbJFcJgYJFys"
 
 [env]
   NODE_ENV = 'production'
