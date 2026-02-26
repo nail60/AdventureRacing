@@ -10,7 +10,6 @@ import { CesiumViewer } from '../components/viewer/CesiumViewer';
 import { PlaybackControls } from '../components/playback/PlaybackControls';
 import { TimeSlider } from '../components/playback/TimeSlider';
 import { SpeedButtons } from '../components/playback/SpeedButtons';
-import { IntensityScrubber } from '../components/playback/IntensityScrubber';
 import { TrackSidebar } from '../components/sidebar/TrackSidebar';
 
 // Error boundary to catch Cesium/Resium crashes and show them on screen
@@ -72,6 +71,28 @@ export function SceneViewerPage() {
     setSidebarCollapsed(isMobile);
   }, [isMobile]);
   const toggleSidebar = useCallback(() => setSidebarCollapsed(prev => !prev), []);
+
+  // Measurement mode — on mobile, gated behind an explicit ruler button
+  const [measuringActive, setMeasuringActive] = useState(false);
+  const [showMeasureHint, setShowMeasureHint] = useState(false);
+  const toggleMeasuring = useCallback(() => {
+    setMeasuringActive(prev => {
+      if (!prev) setShowMeasureHint(true);
+      return !prev;
+    });
+  }, []);
+
+  // Auto-dismiss instruction toast after 4s or on any tap
+  useEffect(() => {
+    if (!showMeasureHint) return;
+    const timer = setTimeout(() => setShowMeasureHint(false), 4000);
+    const dismiss = () => setShowMeasureHint(false);
+    document.addEventListener('pointerdown', dismiss, { once: true });
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('pointerdown', dismiss);
+    };
+  }, [showMeasureHint]);
 
   // Compute time bounds from all tracks
   const { startTime, stopTime } = useMemo(() => {
@@ -147,6 +168,8 @@ export function SceneViewerPage() {
           visibleTrackIds={visibleTrackIds}
           startTime={startTime}
           stopTime={stopTime}
+          isMobile={isMobile}
+          measuringActive={measuringActive}
         />
       </ViewerErrorBoundary>
 
@@ -163,19 +186,11 @@ export function SceneViewerPage() {
             onSeek={playback.seekTo}
           />
         </div>
-        {isMobile ? (
-          <IntensityScrubber
-            getViewer={playback.getViewer}
-            syncUI={playback.syncUI}
-            onStop={playback.stopPlayback}
-          />
-        ) : (
-          <SpeedButtons
-            speedOptions={playback.speedOptions}
-            speedIndex={playback.speedIndex}
-            onSetSpeed={playback.setSpeed}
-          />
-        )}
+        <SpeedButtons
+          speedOptions={playback.speedOptions}
+          speedIndex={playback.speedIndex}
+          onSetSpeed={playback.setSpeed}
+        />
       </div>
 
       {/* Back button */}
@@ -194,6 +209,26 @@ export function SceneViewerPage() {
         Back
       </Link>
 
+      {/* Instruction toast when ruler activated */}
+      {showMeasureHint && (
+        <div style={{
+          position: 'fixed',
+          top: 68,
+          left: 10,
+          right: 10,
+          zIndex: 40,
+          background: 'rgba(20,20,20,0.92)',
+          border: '1px solid #333',
+          borderRadius: 8,
+          padding: '10px 16px',
+          textAlign: 'center',
+          color: '#ccc',
+          fontSize: 14,
+        }}>
+          Tap two locations on the map to measure the straight line distance between them.
+        </div>
+      )}
+
       {/* Track sidebar */}
       {scene && (
         <TrackSidebar
@@ -206,6 +241,8 @@ export function SceneViewerPage() {
           collapsed={sidebarCollapsed}
           onToggleCollapse={toggleSidebar}
           isMobile={isMobile}
+          measuringActive={measuringActive}
+          onToggleMeasuring={toggleMeasuring}
         />
       )}
     </div>

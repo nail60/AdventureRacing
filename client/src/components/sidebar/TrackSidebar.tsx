@@ -12,6 +12,8 @@ interface Props {
   collapsed: boolean;
   onToggleCollapse: () => void;
   isMobile: boolean;
+  measuringActive?: boolean;
+  onToggleMeasuring?: () => void;
 }
 
 export const TrackSidebar = memo(function TrackSidebar({
@@ -24,6 +26,8 @@ export const TrackSidebar = memo(function TrackSidebar({
   collapsed,
   onToggleCollapse,
   isMobile,
+  measuringActive,
+  onToggleMeasuring,
 }: Props) {
   const pilotNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -35,9 +39,24 @@ export const TrackSidebar = memo(function TrackSidebar({
 
   if (collapsed) {
     return (
-      <button onClick={onToggleCollapse} style={collapsedBtnStyle}>
-        {'\u{1FA82}'} {'\u2630'}
-      </button>
+      <div style={collapsedRowStyle}>
+        {isMobile && onToggleMeasuring && (
+          <button onClick={onToggleMeasuring} style={{
+            ...collapsedBtnStyle,
+            position: undefined,
+            top: undefined,
+            right: undefined,
+            background: measuringActive ? 'rgba(79,195,247,0.25)' : 'rgba(20,20,20,0.92)',
+            border: measuringActive ? '1px solid #4fc3f7' : '1px solid #333',
+            color: measuringActive ? '#4fc3f7' : '#fff',
+          }}>
+            {'\uD83D\uDCCF'}
+          </button>
+        )}
+        <button onClick={onToggleCollapse} style={{ ...collapsedBtnStyle, position: undefined, top: undefined, right: undefined }}>
+          {'\u{1FA82}'} {'\u2630'}
+        </button>
+      </div>
     );
   }
 
@@ -70,6 +89,15 @@ export const TrackSidebar = memo(function TrackSidebar({
     </div>
   );
 });
+
+const collapsedRowStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 10,
+  right: 10,
+  display: 'flex',
+  gap: 10,
+  zIndex: 30,
+};
 
 const collapsedBtnStyle: React.CSSProperties = {
   position: 'absolute',
