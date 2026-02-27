@@ -3,7 +3,6 @@ import { Entity } from 'resium';
 import {
   Cartesian3,
   Color,
-  PolylineDashMaterialProperty,
   DistanceDisplayCondition,
   NearFarScalar,
   Cartesian2,
@@ -57,10 +56,7 @@ export function TaskEntity({ task }: Props) {
         polyline={{
           positions: courseLinePositions,
           width: 3,
-          material: new PolylineDashMaterialProperty({
-            color: Color.WHITE.withAlpha(0.9),
-            dashLength: 16,
-          }),
+          material: Color.WHITE.withAlpha(0.9),
           clampToGround: false,
         }}
       />
