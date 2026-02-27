@@ -11,6 +11,7 @@ import { PlaybackControls } from '../components/playback/PlaybackControls';
 import { TimeSlider } from '../components/playback/TimeSlider';
 import { SpeedButtons } from '../components/playback/SpeedButtons';
 import { TrackSidebar } from '../components/sidebar/TrackSidebar';
+import { CompassRose } from '../components/viewer/CompassRose';
 
 // Error boundary to catch Cesium/Resium crashes and show them on screen
 class ViewerErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -208,6 +209,9 @@ export function SceneViewerPage() {
       }}>
         Back
       </Link>
+
+      {/* Compass rose — rotates with camera, click N to reset north-up */}
+      <CompassRose viewerRef={viewerRef} />
 
       {/* Instruction toast when ruler activated */}
       {showMeasureHint && (
