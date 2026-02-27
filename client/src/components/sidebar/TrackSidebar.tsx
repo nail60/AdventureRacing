@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useRef } from 'react';
 import type { SceneDetail, TaskData } from '@adventure-racing/shared';
 import { TrackToggle } from './TrackToggle';
 import { TaskPanel } from './TaskPanel';
@@ -17,6 +17,7 @@ interface Props {
   onToggleMeasuring?: () => void;
   task?: TaskData | null;
   onDeleteTask?: () => void;
+  onAddTask?: (file: File) => void;
 }
 
 export const TrackSidebar = memo(function TrackSidebar({
@@ -33,7 +34,9 @@ export const TrackSidebar = memo(function TrackSidebar({
   onToggleMeasuring,
   task,
   onDeleteTask,
+  onAddTask,
 }: Props) {
+  const taskInputRef = useRef<HTMLInputElement>(null);
   const pilotNameMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const t of scene.tracks) {
@@ -91,9 +94,29 @@ export const TrackSidebar = memo(function TrackSidebar({
           />
         ))}
       </div>
-      {task && onDeleteTask && (
+      {task && onDeleteTask ? (
         <TaskPanel task={task} onDeleteTask={onDeleteTask} />
-      )}
+      ) : !task && onAddTask ? (
+        <div style={{ borderTop: '1px solid #333', paddingTop: 10, marginTop: 10 }}>
+          <input
+            ref={taskInputRef}
+            type="file"
+            accept=".xctsk,.tsk"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onAddTask(file);
+              if (taskInputRef.current) taskInputRef.current.value = '';
+            }}
+          />
+          <button
+            onClick={() => taskInputRef.current?.click()}
+            style={addTaskBtnStyle}
+          >
+            + Add Task
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 });
@@ -182,5 +205,16 @@ const smallBtn: React.CSSProperties = {
   padding: '4px 10px',
   borderRadius: 4,
   fontSize: 11,
+  cursor: 'pointer',
+};
+
+const addTaskBtnStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '8px 12px',
+  background: '#1a1a1a',
+  border: '1px dashed #555',
+  borderRadius: 6,
+  color: '#aaa',
+  fontSize: 12,
   cursor: 'pointer',
 };

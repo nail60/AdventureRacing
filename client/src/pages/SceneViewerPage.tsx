@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo, useCallback, useEffect, Component, type ReactNode, type ErrorInfo } from 'react';
-import { deleteTaskFromScene } from '../api/scenesApi';
+import { addTaskToScene, deleteTaskFromScene } from '../api/scenesApi';
 import { useParams, Link } from 'react-router-dom';
 import { JulianDate } from 'cesium';
 import type { Viewer as CesiumViewerType } from 'cesium';
@@ -75,11 +75,20 @@ export function SceneViewerPage() {
 
   // Task from scene detail
   const task = scene?.task ?? null;
+  const handleAddTask = useCallback(async (file: File) => {
+    if (!id) return;
+    try {
+      await addTaskToScene(id, file);
+      window.location.reload();
+    } catch (err: any) {
+      console.error('Failed to add task:', err);
+    }
+  }, [id]);
+
   const handleDeleteTask = useCallback(async () => {
     if (!id) return;
     try {
       await deleteTaskFromScene(id);
-      // Reload scene to clear task
       window.location.reload();
     } catch (err: any) {
       console.error('Failed to delete task:', err);
@@ -260,6 +269,7 @@ export function SceneViewerPage() {
           onToggleMeasuring={toggleMeasuring}
           task={task}
           onDeleteTask={handleDeleteTask}
+          onAddTask={handleAddTask}
         />
       )}
     </div>
