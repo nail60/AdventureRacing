@@ -12,7 +12,8 @@
     "dev:server": "npm run dev -w server",
     "dev:client": "npm run dev -w client",
     "build": "npm run build -w shared && npm run build -w server && npm run build -w client",
-    "test:e2e": "npm test -w e2e"
+    "test:e2e": "npm test -w e2e",
+    "postinstall": "bash scripts/postinstall.sh"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
