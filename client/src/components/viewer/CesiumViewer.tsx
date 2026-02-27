@@ -24,8 +24,9 @@ import {
 } from 'cesium';
 import type { Entity as CesiumEntity } from 'cesium';
 import type { CesiumComponentRef } from 'resium';
-import type { TrackData } from '@adventure-racing/shared';
+import type { TrackData, TaskData } from '@adventure-racing/shared';
 import { TrackEntity } from './TrackEntity';
+import { TaskEntity } from './TaskEntity';
 import { getTrackColorCesium } from '../../utils/colorPalette';
 
 // Only set Ion token if provided via env
@@ -46,9 +47,10 @@ interface Props {
   stopTime: JulianDate | null;
   isMobile: boolean;
   measuringActive: boolean;
+  task?: TaskData | null;
 }
 
-export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, startTime, stopTime, isMobile, measuringActive }: Props) {
+export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, startTime, stopTime, isMobile, measuringActive, task }: Props) {
 
     // Fly to starting area on load — retry until viewer ref is ready
     const cameraInitialized = useRef(false);
@@ -610,6 +612,7 @@ export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, sta
             visible={visibleTrackIds.has(id)}
           />
         ))}
+        {task && <TaskEntity task={task} />}
       </Viewer>
     </>);
 }
