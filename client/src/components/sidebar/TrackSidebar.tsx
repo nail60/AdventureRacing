@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef } from 'react';
+import { memo, useMemo, useRef, useState } from 'react';
 import type { SceneDetail, TaskData } from '@adventure-racing/shared';
 import { TrackToggle } from './TrackToggle';
 import { TaskPanel } from './TaskPanel';
@@ -36,6 +36,7 @@ export const TrackSidebar = memo(function TrackSidebar({
   onDeleteTask,
   onAddTask,
 }: Props) {
+  const [activeTab, setActiveTab] = useState<'tracks' | 'task'>('tracks');
   const taskInputRef = useRef<HTMLInputElement>(null);
   const pilotNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -78,45 +79,63 @@ export const TrackSidebar = memo(function TrackSidebar({
         <h3 style={titleStyle}>{scene.name}</h3>
         <button onClick={onToggleCollapse} style={closeBtnStyle}>{'\u2715'}</button>
       </div>
-      <div style={btnRowStyle}>
-        <button onClick={onShowAll} style={smallBtn}>Show All</button>
-        <button onClick={onHideAll} style={smallBtn}>Hide All</button>
-      </div>
-      <div>
-        {trackIds.map((id, index) => (
-          <TrackToggle
-            key={id}
-            trackId={id}
-            pilotName={pilotNameMap.get(id) || 'Unknown'}
-            index={index}
-            visible={visibleTrackIds.has(id)}
-            onToggle={onToggleTrack}
-          />
+      <div style={tabBarStyle}>
+        {(['tracks', 'task'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={activeTab === tab ? activeTabStyle : inactiveTabStyle}
+          >
+            {tab === 'tracks' ? 'Tracks' : 'Task'}
+          </button>
         ))}
       </div>
-      {task && onDeleteTask ? (
-        <TaskPanel task={task} onDeleteTask={onDeleteTask} />
-      ) : !task && onAddTask ? (
-        <div style={{ borderTop: '1px solid #333', paddingTop: 10, marginTop: 10 }}>
-          <input
-            ref={taskInputRef}
-            type="file"
-            accept=".xctsk,.tsk"
-            style={{ display: 'none' }}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) onAddTask(file);
-              if (taskInputRef.current) taskInputRef.current.value = '';
-            }}
-          />
-          <button
-            onClick={() => taskInputRef.current?.click()}
-            style={addTaskBtnStyle}
-          >
-            + Add Task
-          </button>
-        </div>
-      ) : null}
+      {activeTab === 'tracks' ? (
+        <>
+          <div style={btnRowStyle}>
+            <button onClick={onShowAll} style={smallBtn}>Show All</button>
+            <button onClick={onHideAll} style={smallBtn}>Hide All</button>
+          </div>
+          <div>
+            {trackIds.map((id, index) => (
+              <TrackToggle
+                key={id}
+                trackId={id}
+                pilotName={pilotNameMap.get(id) || 'Unknown'}
+                index={index}
+                visible={visibleTrackIds.has(id)}
+                onToggle={onToggleTrack}
+              />
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          {task && onDeleteTask ? (
+            <TaskPanel task={task} onDeleteTask={onDeleteTask} />
+          ) : onAddTask ? (
+            <div>
+              <input
+                ref={taskInputRef}
+                type="file"
+                accept=".xctsk,.tsk"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onAddTask(file);
+                  if (taskInputRef.current) taskInputRef.current.value = '';
+                }}
+              />
+              <button
+                onClick={() => taskInputRef.current?.click()}
+                style={addTaskBtnStyle}
+              >
+                + Add Task
+              </button>
+            </div>
+          ) : null}
+        </>
+      )}
     </div>
   );
 });
@@ -206,6 +225,34 @@ const smallBtn: React.CSSProperties = {
   borderRadius: 4,
   fontSize: 11,
   cursor: 'pointer',
+};
+
+const tabBarStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: 0,
+  marginBottom: 8,
+  borderBottom: '1px solid #333',
+};
+
+const baseTabStyle: React.CSSProperties = {
+  flex: 1,
+  background: 'none',
+  border: 'none',
+  padding: '6px 0',
+  fontSize: 12,
+  cursor: 'pointer',
+};
+
+const activeTabStyle: React.CSSProperties = {
+  ...baseTabStyle,
+  color: '#4fc3f7',
+  borderBottom: '2px solid #4fc3f7',
+  marginBottom: -1,
+};
+
+const inactiveTabStyle: React.CSSProperties = {
+  ...baseTabStyle,
+  color: '#888',
 };
 
 const addTaskBtnStyle: React.CSSProperties = {
