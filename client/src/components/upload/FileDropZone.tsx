@@ -14,7 +14,7 @@ export function FileDropZone({ files, onFilesChange }: Props) {
     setDragOver(false);
     const dropped = Array.from(e.dataTransfer.files).filter(f => {
       const ext = f.name.toLowerCase().split('.').pop();
-      return ['igc', 'kmz', 'kml'].includes(ext || '');
+      return ['igc', 'kmz', 'kml', 'xctsk', 'tsk'].includes(ext || '');
     });
     onFilesChange([...files, ...dropped]);
   }, [files, onFilesChange]);
@@ -47,7 +47,7 @@ export function FileDropZone({ files, onFilesChange }: Props) {
         }}
       >
         <p style={{ fontSize: 16, color: '#aaa' }}>
-          Drop IGC/KMZ/KML files here or click to browse
+          Drop IGC/KMZ/KML/TSK files here or click to browse
         </p>
         <p style={{ fontSize: 13, color: '#666', marginTop: 8 }}>
           Up to 120 files supported
@@ -56,7 +56,7 @@ export function FileDropZone({ files, onFilesChange }: Props) {
           ref={inputRef}
           type="file"
           multiple
-          accept=".igc,.kmz,.kml"
+          accept=".igc,.kmz,.kml,.xctsk,.tsk"
           onChange={handleSelect}
           style={{ display: 'none' }}
         />

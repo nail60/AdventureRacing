@@ -1,4 +1,5 @@
 import { useState, useRef, useMemo, useCallback, useEffect, Component, type ReactNode, type ErrorInfo } from 'react';
+import { deleteTaskFromScene } from '../api/scenesApi';
 import { useParams, Link } from 'react-router-dom';
 import { JulianDate } from 'cesium';
 import type { Viewer as CesiumViewerType } from 'cesium';
@@ -71,6 +72,19 @@ export function SceneViewerPage() {
     setSidebarCollapsed(isMobile);
   }, [isMobile]);
   const toggleSidebar = useCallback(() => setSidebarCollapsed(prev => !prev), []);
+
+  // Task from scene detail
+  const task = scene?.task ?? null;
+  const handleDeleteTask = useCallback(async () => {
+    if (!id) return;
+    try {
+      await deleteTaskFromScene(id);
+      // Reload scene to clear task
+      window.location.reload();
+    } catch (err: any) {
+      console.error('Failed to delete task:', err);
+    }
+  }, [id]);
 
   // Measurement mode — on mobile, gated behind an explicit ruler button
   const [measuringActive, setMeasuringActive] = useState(false);
@@ -170,6 +184,7 @@ export function SceneViewerPage() {
           stopTime={stopTime}
           isMobile={isMobile}
           measuringActive={measuringActive}
+          task={task}
         />
       </ViewerErrorBoundary>
 
@@ -243,6 +258,8 @@ export function SceneViewerPage() {
           isMobile={isMobile}
           measuringActive={measuringActive}
           onToggleMeasuring={toggleMeasuring}
+          task={task}
+          onDeleteTask={handleDeleteTask}
         />
       )}
     </div>

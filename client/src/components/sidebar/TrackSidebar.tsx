@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react';
-import type { SceneDetail } from '@adventure-racing/shared';
+import type { SceneDetail, TaskData } from '@adventure-racing/shared';
 import { TrackToggle } from './TrackToggle';
+import { TaskPanel } from './TaskPanel';
 
 interface Props {
   scene: SceneDetail;
@@ -14,6 +15,8 @@ interface Props {
   isMobile: boolean;
   measuringActive?: boolean;
   onToggleMeasuring?: () => void;
+  task?: TaskData | null;
+  onDeleteTask?: () => void;
 }
 
 export const TrackSidebar = memo(function TrackSidebar({
@@ -28,6 +31,8 @@ export const TrackSidebar = memo(function TrackSidebar({
   isMobile,
   measuringActive,
   onToggleMeasuring,
+  task,
+  onDeleteTask,
 }: Props) {
   const pilotNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -86,6 +91,9 @@ export const TrackSidebar = memo(function TrackSidebar({
           />
         ))}
       </div>
+      {task && onDeleteTask && (
+        <TaskPanel task={task} onDeleteTask={onDeleteTask} />
+      )}
     </div>
   );
 });

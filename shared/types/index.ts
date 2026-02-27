@@ -30,6 +30,35 @@ export interface SceneMeta {
 
 export interface SceneDetail extends SceneMeta {
   tracks: SceneTrackInfo[];
+  task?: TaskData | null;
+}
+
+export type TurnpointType = 'SSS' | 'ESS' | 'TURNPOINT';
+
+export interface TaskTurnpoint {
+  name: string;
+  description?: string;
+  lat: number;
+  lon: number;
+  alt: number;
+  radius: number;
+  type: TurnpointType;
+}
+
+export interface TaskStartGate {
+  type: string;
+  direction: string;
+  timeGates: string[];
+}
+
+export interface TaskData {
+  taskType: string;
+  turnpoints: TaskTurnpoint[];
+  sss?: TaskStartGate;
+  goalDeadline?: string;
+  earthModel?: string;
+  optimizedDistance?: number;
+  optimizedPoints?: [number, number][];
 }
 
 export interface SceneTrackInfo {
