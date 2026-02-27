@@ -1,0 +1,34 @@
+app = 'adventure-racing-dev'
+primary_region = 'cdg'
+
+[build]
+  [build.args]
+    VITE_CESIUM_ION_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyNTU1OTI4Ny01MTFlLTQ0YjYtOWJhZS0yNzBmYzI1YTgxYmMiLCJpZCI6MzkwNDI1LCJpYXQiOjE3NzEwMDkzMDF9.W_jzs-cqjKDT7MeK2NHHFuTPFsAAIgFQbJFcJgYJFys"
+
+[env]
+  NODE_ENV = 'production'
+  PORT = '8080'
+  DATABASE_PATH = '/data/adventure-racing.db'
+  NODE_OPTIONS = '--max-old-space-size=1536'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[http_service.checks]]
+  grace_period = '30s'
+  interval = '60s'
+  method = 'GET'
+  path = '/api/health'
+  timeout = '10s'
+
+[mounts]
+  source = 'adventure_racing_dev_data'
+  destination = '/data'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '2048mb'
