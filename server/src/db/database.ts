@@ -55,4 +55,7 @@ function runMigrations(db: Database.Database) {
   if (!cols.some(c => c.name === 'processing_step')) {
     db.exec("ALTER TABLE scenes ADD COLUMN processing_step TEXT");
   }
+  if (!cols.some(c => c.name === 'task_s3_key')) {
+    db.exec("ALTER TABLE scenes ADD COLUMN task_s3_key TEXT");
+  }
 }

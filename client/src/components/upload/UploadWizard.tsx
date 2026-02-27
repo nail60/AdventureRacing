@@ -21,6 +21,12 @@ export function UploadWizard() {
       return;
     }
 
+    const taskFileCount = files.filter(f => /\.(xctsk|tsk)$/i.test(f.name)).length;
+    if (taskFileCount > 1) {
+      setError('Only one task file per scene is allowed');
+      return;
+    }
+
     try {
       setUploading(true);
       setError(null);

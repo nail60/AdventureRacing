@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { SceneMeta, SceneDetail, TrackData, TracklogMeta } from '@adventure-racing/shared';
+import type { SceneMeta, SceneDetail, TrackData, TracklogMeta, TaskData } from '@adventure-racing/shared';
 
 const api = axios.create({ baseURL: '/api' });
 
@@ -40,6 +40,19 @@ export async function getCompressedTrack(sceneId: string, tracklogId: string): P
 
 export async function deleteScene(id: string): Promise<void> {
   await api.delete(`/scenes/${id}`);
+}
+
+export async function addTaskToScene(sceneId: string, file: File): Promise<TaskData> {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await api.post(`/scenes/${sceneId}/task`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}
+
+export async function deleteTaskFromScene(sceneId: string): Promise<void> {
+  await api.delete(`/scenes/${sceneId}/task`);
 }
 
 export async function listTracklogs(): Promise<TracklogMeta[]> {

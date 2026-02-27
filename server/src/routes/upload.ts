@@ -14,7 +14,7 @@ const upload = multer({
   },
   fileFilter: (_req, file, cb) => {
     const ext = file.originalname.toLowerCase().split('.').pop();
-    if (['igc', 'kmz', 'kml'].includes(ext || '')) {
+    if (['igc', 'kmz', 'kml', 'xctsk', 'tsk'].includes(ext || '')) {
       cb(null, true);
     } else {
       cb(new AppError(400, `Unsupported file type: ${file.originalname}`));

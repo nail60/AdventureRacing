@@ -7,7 +7,9 @@ import { parseKMZ } from '../parsers/kmzParser.js';
 import { compressTracks } from '../compression/trackSimplifier.js';
 import { computeTrackMetrics } from '../compression/trackMetrics.js';
 import { config } from '../config.js';
-import type { TrackData, SceneMeta, SceneDetail, TracklogMeta } from '@adventure-racing/shared';
+import { AppError } from '../middleware/errorHandler.js';
+import { parseTaskFile } from '../parsers/taskParser.js';
+import type { TrackData, TaskData, SceneMeta, SceneDetail, TracklogMeta } from '@adventure-racing/shared';
 
 interface UploadedFile {
   originalname: string;
@@ -65,10 +67,27 @@ async function processScene(sceneId: string, files: UploadedFile[]) {
   const db = getDb();
   const allTracks: { tracklogId: string; track: TrackData }[] = [];
 
+  // Separate task files from track files
+  const taskFiles = files.filter(f => /\.(xctsk|tsk)$/i.test(f.originalname));
+  const trackFiles = files.filter(f => !/\.(xctsk|tsk)$/i.test(f.originalname));
+
+  // Process task file (max 1)
+  if (taskFiles.length > 1) {
+    throw new Error('Only one task file per scene is allowed');
+  }
+  if (taskFiles.length === 1) {
+    setStep(sceneId, 'Parsing task file');
+    const taskFile = taskFiles[0];
+    const taskData = parseTaskFile(taskFile.buffer, taskFile.originalname);
+    const taskS3Key = `scenes/${sceneId}/task.json`;
+    await s3.putObject(taskS3Key, JSON.stringify(taskData));
+    db.prepare('UPDATE scenes SET task_s3_key = ? WHERE id = ?').run(taskS3Key, sceneId);
+  }
+
   // Parse each file and store full-res tracklogs
-  for (let fi = 0; fi < files.length; fi++) {
-    const file = files[fi];
-    setStep(sceneId, `Parsing track ${fi + 1} of ${files.length}`);
+  for (let fi = 0; fi < trackFiles.length; fi++) {
+    const file = trackFiles[fi];
+    setStep(sceneId, `Parsing track ${fi + 1} of ${trackFiles.length}`);
 
     const ext = file.originalname.toLowerCase().split('.').pop();
     let tracks: TrackData[];
@@ -173,10 +192,10 @@ export function listScenes(): SceneMeta[] {
   }));
 }
 
-export function getSceneDetail(sceneId: string): SceneDetail | null {
+export async function getSceneDetail(sceneId: string): Promise<SceneDetail | null> {
   const db = getDb();
   const scene = db.prepare(`
-    SELECT s.id, s.name, s.status, s.processing_step, s.created_at,
+    SELECT s.id, s.name, s.status, s.processing_step, s.created_at, s.task_s3_key,
       (SELECT COUNT(*) FROM scene_tracks WHERE scene_id = s.id) as track_count
     FROM scenes s WHERE s.id = ?
   `).get(sceneId) as any;
@@ -192,6 +211,16 @@ export function getSceneDetail(sceneId: string): SceneDetail | null {
     WHERE st.scene_id = ?
   `).all(sceneId) as any[];
 
+  let task: TaskData | null = null;
+  if (scene.task_s3_key) {
+    try {
+      const taskJson = await s3.getObject(scene.task_s3_key);
+      task = JSON.parse(taskJson);
+    } catch {
+      // Task file missing from S3 — treat as no task
+    }
+  }
+
   return {
     id: scene.id,
     name: scene.name,
@@ -206,6 +235,7 @@ export function getSceneDetail(sceneId: string): SceneDetail | null {
       startTime: t.start_time,
       endTime: t.end_time,
     })),
+    task,
   };
 }
 
@@ -264,4 +294,29 @@ export function getTracklog(tracklogId: string): TracklogMeta | null {
     originalFilename: row.original_filename,
     uploadedAt: row.uploaded_at,
   };
+}
+
+export async function addTaskToScene(sceneId: string, file: UploadedFile): Promise<TaskData> {
+  const db = getDb();
+  const scene = db.prepare('SELECT id, task_s3_key FROM scenes WHERE id = ?').get(sceneId) as any;
+  if (!scene) throw new AppError(404, 'Scene not found');
+  if (scene.task_s3_key) throw new AppError(409, 'Scene already has a task. Delete it first.');
+
+  const taskData = parseTaskFile(file.buffer, file.originalname);
+  const taskS3Key = `scenes/${sceneId}/task.json`;
+  await s3.putObject(taskS3Key, JSON.stringify(taskData));
+  db.prepare('UPDATE scenes SET task_s3_key = ? WHERE id = ?').run(taskS3Key, sceneId);
+
+  return taskData;
+}
+
+export async function deleteTaskFromScene(sceneId: string): Promise<boolean> {
+  const db = getDb();
+  const scene = db.prepare('SELECT id, task_s3_key FROM scenes WHERE id = ?').get(sceneId) as any;
+  if (!scene) return false;
+  if (!scene.task_s3_key) return false;
+
+  await s3.deleteObject(scene.task_s3_key);
+  db.prepare('UPDATE scenes SET task_s3_key = NULL WHERE id = ?').run(sceneId);
+  return true;
 }
