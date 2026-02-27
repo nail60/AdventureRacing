@@ -44,9 +44,11 @@ interface Props {
   visibleTrackIds: Set<string>;
   startTime: JulianDate | null;
   stopTime: JulianDate | null;
+  isMobile: boolean;
+  measuringActive: boolean;
 }
 
-export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, startTime, stopTime }: Props) {
+export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, startTime, stopTime, isMobile, measuringActive }: Props) {
 
     // Fly to starting area on load — retry until viewer ref is ready
     const cameraInitialized = useRef(false);
@@ -174,7 +176,16 @@ export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, sta
 
     // Hover/tap tooltip + track highlight — direct DOM manipulation, no React re-renders
     const tooltipRef = useRef<HTMLDivElement>(null);
+    const mobileTooltipRef = useRef<HTMLDivElement>(null);
+    const tapDotRef = useRef<HTMLDivElement>(null);
+    const tapDotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const hoveredEntityRef = useRef<CesiumEntity | null>(null);
+
+    // Keep refs for props so the ScreenSpaceEventHandler closure sees current values
+    const isMobileRef = useRef(isMobile);
+    isMobileRef.current = isMobile;
+    const measuringActiveRef = useRef(measuringActive);
+    measuringActiveRef.current = measuringActive;
 
     useEffect(() => {
       let handler: ScreenSpaceEventHandler | null = null;
@@ -418,15 +429,42 @@ export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, sta
           detailLine = `<div style="font-size:12px;color:#aaa;margin-top:2px">${altMSL}m MSL${agl != null ? ` · ${agl}m AGL` : ''}${metricsHtml}</div>`;
         }
 
-        tooltip.innerHTML = `<div style="font-weight:600">${name}${timeStr ? `<span style="font-weight:400;color:#aaa;margin-left:8px">${timeStr}</span>` : ''}</div>${detailLine}`;
-        tooltip.style.display = 'block';
-        tooltip.style.left = `${position.x + 15}px`;
-        tooltip.style.top = `${position.y - 10}px`;
+        const html = `<div style="font-weight:600">${name}${timeStr ? `<span style="font-weight:400;color:#aaa;margin-left:8px">${timeStr}</span>` : ''}</div>${detailLine}`;
+
+        if (isMobileRef.current) {
+          // Mobile: show content in fixed top bar
+          const mobileTooltip = mobileTooltipRef.current;
+          if (mobileTooltip) {
+            mobileTooltip.innerHTML = html;
+            mobileTooltip.style.display = 'block';
+          }
+          // Show tap dot at touch point
+          const tapDot = tapDotRef.current;
+          if (tapDot) {
+            tapDot.style.left = `${position.x - 5}px`;
+            tapDot.style.top = `${position.y - 5}px`;
+            tapDot.style.display = 'block';
+            if (tapDotTimerRef.current) clearTimeout(tapDotTimerRef.current);
+            tapDotTimerRef.current = setTimeout(() => {
+              tapDot.style.display = 'none';
+            }, 2000);
+          }
+          // Keep cursor tooltip hidden on mobile
+          tooltip.style.display = 'none';
+        } else {
+          // Desktop: position tooltip at cursor
+          tooltip.innerHTML = html;
+          tooltip.style.display = 'block';
+          tooltip.style.left = `${position.x + 15}px`;
+          tooltip.style.top = `${position.y - 10}px`;
+        }
       }
 
       function hideTooltip() {
         const tooltip = tooltipRef.current;
         if (tooltip) tooltip.style.display = 'none';
+        const mobileTooltip = mobileTooltipRef.current;
+        if (mobileTooltip) mobileTooltip.style.display = 'none';
       }
 
       function highlightEntity(entity: CesiumEntity | null) {
@@ -490,7 +528,7 @@ export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, sta
           mouseDownPosRef.current = { x: click.position.x, y: click.position.y };
         }, ScreenSpaceEventType.LEFT_DOWN);
 
-        // On mouse-up: if moved < 5px, treat as click → measurement state machine
+        // On mouse-up: if moved < 5px, treat as click → measurement or tooltip
         handler.setInputAction((click: { position: { x: number; y: number } }) => {
           const down = mouseDownPosRef.current;
           mouseDownPosRef.current = null;
@@ -500,6 +538,13 @@ export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, sta
           const dy = click.position.y - down.y;
           if (dx * dx + dy * dy > 25) return; // dragged — not a click
 
+          // Mobile tap without measurement mode → tooltip pick instead
+          if (isMobileRef.current && !measuringActiveRef.current) {
+            handlePick(click.position, viewer);
+            return;
+          }
+
+          // Measurement state machine (desktop always, mobile only when ruler active)
           const pos = viewer.scene.pickPosition(new Cartesian2(click.position.x, click.position.y));
 
           if (measureStateRef.current === 'FIRST_PLACED') {
@@ -511,8 +556,12 @@ export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, sta
             }
             finalizeMeasurement(viewer, pos);
             measureStateRef.current = 'MEASURED';
+          } else if (measureStateRef.current === 'MEASURED') {
+            // Third tap — dismiss measurement
+            clearMeasurement(viewer);
+            measureStateRef.current = 'IDLE';
           } else {
-            // IDLE or MEASURED — clear and start new
+            // IDLE — start new measurement
             if (!pos) return; // clicked sky with no active measurement — ignore
             clearMeasurement(viewer);
             placeFirstPoint(viewer, pos);
@@ -526,6 +575,7 @@ export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, sta
         if (rafId !== undefined) cancelAnimationFrame(rafId);
         highlightEntity(null);
         document.removeEventListener('keydown', onKeyDown);
+        if (tapDotTimerRef.current) clearTimeout(tapDotTimerRef.current);
         const viewer = viewerRef.current?.cesiumElement;
         if (viewer) clearMeasurement(viewer);
         handler?.destroy();
@@ -534,6 +584,8 @@ export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, sta
 
     return (<>
       <div ref={tooltipRef} style={tooltipStyle} />
+      <div ref={mobileTooltipRef} style={mobileTooltipStyle} />
+      <div ref={tapDotRef} style={tapDotStyle} />
       <Viewer
         ref={viewerRef}
         full
@@ -575,4 +627,33 @@ const tooltipStyle: React.CSSProperties = {
   borderRadius: 6,
   padding: '4px 10px',
   whiteSpace: 'nowrap',
+};
+
+const mobileTooltipStyle: React.CSSProperties = {
+  position: 'fixed',
+  top: 68,
+  left: 10,
+  right: 10,
+  display: 'none',
+  pointerEvents: 'none',
+  zIndex: 20,
+  fontSize: 14,
+  fontWeight: 600,
+  color: '#fff',
+  background: 'rgba(20,20,20,0.92)',
+  border: '1px solid #333',
+  borderRadius: 8,
+  padding: '8px 12px',
+};
+
+const tapDotStyle: React.CSSProperties = {
+  position: 'fixed',
+  display: 'none',
+  pointerEvents: 'none',
+  zIndex: 19,
+  width: 10,
+  height: 10,
+  borderRadius: '50%',
+  background: '#4fc3f7',
+  boxShadow: '0 0 6px #4fc3f7',
 };
