@@ -12,7 +12,10 @@
     "jsx": "react-jsx",
     "outDir": "dist",
     "sourceMap": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "@adventure-racing/shared": ["../shared/types/index.ts"]
+    }
   },
   "include": ["src/**/*", "../shared/**/*"]
 }

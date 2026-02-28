@@ -6,6 +6,7 @@ export interface TrackData {
   lift?: (number | null)[];           // m/s per point (positive = climbing)
   glideRatio?: (number | null)[];     // L/D; null when climbing or near-level
   optimizedDistance?: number[];        // FAI 3-point free distance in meters
+  flights?: [number, number][];        // [startIndex, endIndex] pairs for flight segments
 }
 
 export interface TracklogMeta {

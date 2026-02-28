@@ -13,6 +13,8 @@ import {
   ClockStep,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
+  CameraEventType,
+  KeyboardEventModifier,
   ConstantProperty,
   CallbackProperty,
   Color,
@@ -510,6 +512,15 @@ export function CesiumViewer({ viewerRef, tracks, trackIds, visibleTrackIds, sta
           rafId = requestAnimationFrame(trySetup);
           return;
         }
+
+        // Allow Option (Alt) + left-drag to orbit around a point (same as Ctrl+drag)
+        const ctrl = viewer.scene.screenSpaceCameraController;
+        const tiltTypes = ctrl.tiltEventTypes as any[];
+        tiltTypes.push({
+          eventType: CameraEventType.LEFT_DRAG,
+          modifier: KeyboardEventModifier.ALT,
+        });
+
         handler = new ScreenSpaceEventHandler(viewer.scene.canvas);
 
         // Desktop: hover + rubber-band update
