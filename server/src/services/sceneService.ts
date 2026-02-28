@@ -9,6 +9,8 @@ import { computeTrackMetrics } from '../compression/trackMetrics.js';
 import { config } from '../config.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { parseTaskFile } from '../parsers/taskParser.js';
+import { computeAGL } from './elevationService.js';
+import { detectFlights } from './flightDetector.js';
 import type { TrackData, TaskData, SceneMeta, SceneDetail, TracklogMeta } from '@adventure-racing/shared';
 
 interface UploadedFile {
@@ -152,6 +154,13 @@ async function processScene(sceneId: string, files: UploadedFile[]) {
   setStep(sceneId, `Compressing ${allTracks.length} tracks`);
   const rawTracks = allTracks.map(t => t.track);
   const withMetrics = await compressInWorker(rawTracks, config.maxSceneSize);
+
+  // Detect flight segments (takeoff/landing) using SRTM terrain data
+  setStep(sceneId, 'Detecting flights');
+  for (const track of withMetrics) {
+    const agl = await computeAGL(track.positions);
+    track.flights = detectFlights(track.timestamps, agl, track.speed);
+  }
 
   // Store compressed tracks in S3
   setStep(sceneId, 'Saving compressed tracks');
