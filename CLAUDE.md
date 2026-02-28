@@ -3,9 +3,12 @@
 ## Setup
 
 ```sh
-npm install              # postinstall auto-creates cesium symlink
+npm install              # postinstall auto-creates cesium symlink + .env symlinks in worktrees
 cp .env.example .env     # then add real VITE_CESIUM_ION_TOKEN
+cp .env client/.env      # client needs VITE_CESIUM_ION_TOKEN too (or just the token line)
 ```
+
+In git worktrees, `npm install` auto-symlinks `.env` and `client/.env` from the main working tree.
 
 MinIO needed for S3 locally: endpoint `http://localhost:9000`, creds `minioadmin/minioadmin`, bucket `adventure-racing`.
 
