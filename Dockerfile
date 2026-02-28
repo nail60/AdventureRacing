@@ -11,6 +11,7 @@ COPY package.json package-lock.json ./
 COPY shared/package.json shared/
 COPY server/package.json server/
 COPY client/package.json client/
+COPY scripts/ scripts/
 
 RUN npm ci
 
