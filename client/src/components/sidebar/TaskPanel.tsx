@@ -36,7 +36,7 @@ export function TaskPanel({ task, onDeleteTask }: Props) {
   }, [task]);
 
   return (
-    <div style={{ borderTop: '1px solid #333', paddingTop: 10, marginTop: 10 }}>
+    <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <h4 style={{ margin: 0, fontSize: 13, color: '#aaa' }}>
           Task <span style={badgeStyle}>{task.taskType}</span>
