@@ -24,6 +24,9 @@ COPY client/ client/
 ARG VITE_CESIUM_ION_TOKEN
 ENV VITE_CESIUM_ION_TOKEN=$VITE_CESIUM_ION_TOKEN
 
+# Restore cesium symlink (COPY client/ overwrites client/node_modules from postinstall)
+RUN mkdir -p client/node_modules && ln -sf ../../node_modules/cesium client/node_modules/cesium
+
 # Build all workspaces (shared → server → client)
 RUN npm run build
 
