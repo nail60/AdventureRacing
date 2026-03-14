@@ -6,6 +6,7 @@ import { parseIGC } from '../parsers/igcParser.js';
 import { parseKMZ } from '../parsers/kmzParser.js';
 import { compressTracks } from '../compression/trackSimplifier.js';
 import { computeTrackMetrics } from '../compression/trackMetrics.js';
+import { sanitizeTrack } from '../compression/trackSanitizer.js';
 import { config } from '../config.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { parseTaskFile } from '../parsers/taskParser.js';
@@ -111,7 +112,8 @@ async function processScene(sceneId: string, files: UploadedFile[]) {
       continue;
     }
 
-    for (const track of tracks) {
+    for (let track of tracks) {
+      track = sanitizeTrack(track);
       const tracklogId = uuid();
       const s3Key = `tracklogs/${tracklogId}.json`;
       const rawS3Key = `tracklogs/${tracklogId}/raw/${file.originalname}`;
